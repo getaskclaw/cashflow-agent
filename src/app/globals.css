@@ -22,3 +22,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   margin: 0;
 }
+
+@keyframes cfspin {
+  to { transform: rotate(360deg); }
+}
