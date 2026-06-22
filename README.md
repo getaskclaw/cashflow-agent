@@ -72,7 +72,8 @@ Getting paid is the **#1 pain** with the **fewest solutions**. That's the gap we
 |---|---|
 | Frontend | Next.js + Tailwind CSS |
 | Database | SQLite via Prisma |
-| Auth | NextAuth (email + Google) |
+| Auth | NextAuth (Google + email) |
+| Email | Resend (outbound + inbound webhooks) |
 | Payments | Stripe Connect + Payment Links |
 | Agent | Hermes Agent |
 | Agent Skills | 5 Python scripts (read, draft, parse, link, schedule) |
@@ -95,6 +96,7 @@ Getting paid is the **#1 pain** with the **fewest solutions**. That's the gap we
 | **8** | **Agent economics**: Every approved send records a $0.25 email delivery transaction → Agent Economics panel shows Earned / Spent / Net → closes the hackathon's earn-spend-run triangle |
 | **9** | **Batch collections**: "Run Collections" button drafts all overdue invoices at once → batch review with per-draft edit/approve → Payment Link button creates Stripe link per invoice |
 | **10** | **Collection metrics**: Collection rate, avg days to pay, promise-keep rate, escalation rate, recovered vs outstanding — computed live from invoice data. Demo reply quick-fill buttons for instant demo |
+| **11** | **Real SaaS**: Resend email integration (approve actually sends email), Google OAuth sign-in, inbound email webhook for auto-reply matching, invoice creation UI, simulation mode (LLM roleplays as customer → auto-generates reply → agent parses → loop closes in 20 seconds) |
 
 ### Next
 
