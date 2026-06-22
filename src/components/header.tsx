@@ -2,7 +2,7 @@
 
 import { useSession, signIn, signOut } from "next-auth/react";
 
-export function Header() {
+export function Header({ demo }: { demo?: boolean }) {
   const { data: session } = useSession();
 
   return (
@@ -19,6 +19,22 @@ export function Header() {
         <span style={{ fontWeight: 800, fontSize: 18 }}>
           <span style={{ color: "var(--accent)" }}>Cashflow</span> Agent
         </span>
+        {demo && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--amber)",
+              background: "var(--amber)" + "22",
+              padding: "2px 10px",
+              borderRadius: 12,
+              letterSpacing: "0.5px",
+              textTransform: "uppercase",
+            }}
+          >
+            Demo Mode
+          </span>
+        )}
         {session && (
           <nav style={{ display: "flex", gap: 16, fontSize: 14 }}>
             <a

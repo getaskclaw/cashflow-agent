@@ -2,14 +2,27 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { isDemoRequest, getDemoUserId } from "@/lib/demo";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(req: Request) {
+  let userId: string;
+
+  if (isDemoRequest(req)) {
+    const demoId = await getDemoUserId();
+    if (!demoId) {
+      return NextResponse.json(
+        { error: "Demo user not seeded. Run `npx prisma db seed`." },
+        { status: 404 }
+      );
+    }
+    userId = demoId;
+  } else {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    userId = session.user.id;
   }
-
-  const userId = session.user.id;
 
   const connection = await prisma.stripeConnection.findUnique({
     where: { userId },

@@ -117,50 +117,86 @@ export default function HomePage() {
 
         <div style={{ marginTop: 48 }}>
           {session ? (
-            <a
-              href="/dashboard"
-              style={{
-                display: "inline-block",
-                background: "var(--accent)",
-                color: "#fff",
-                padding: "14px 32px",
-                borderRadius: 10,
-                fontSize: 16,
-                fontWeight: 700,
-                textDecoration: "none",
-              }}
-            >
-              Go to Dashboard →
-            </a>
+            <div style={{ display: "inline-flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+              <a
+                href="/dashboard"
+                style={{
+                  display: "inline-block",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  padding: "14px 32px",
+                  borderRadius: 10,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                Go to Dashboard →
+              </a>
+              <a
+                href="/dashboard?demo=1"
+                style={{
+                  display: "inline-block",
+                  background: "transparent",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                  padding: "14px 32px",
+                  borderRadius: 10,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                View Live Demo →
+              </a>
+            </div>
           ) : (
-            <button
-              onClick={() => {
-                const email = prompt("Enter your email to sign in:");
-                if (email) {
-                  fetch("/api/auth/signin/email", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, csrfToken: "" }),
-                  });
-                  alert(
-                    "Check your email for a magic link! (If email isn't configured, use the demo mode.)"
-                  );
-                }
-              }}
-              style={{
-                display: "inline-block",
-                background: "var(--accent)",
-                color: "#fff",
-                padding: "14px 32px",
-                borderRadius: 10,
-                fontSize: 16,
-                fontWeight: 700,
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              Get Started Free
-            </button>
+            <div style={{ display: "inline-flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+              <button
+                onClick={() => {
+                  const email = prompt("Enter your email to sign in:");
+                  if (email) {
+                    fetch("/api/auth/signin/email", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email, csrfToken: "" }),
+                    });
+                    alert(
+                      "Check your email for a magic link! (If email isn't configured, use the demo mode.)"
+                    );
+                  }
+                }}
+                style={{
+                  display: "inline-block",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  padding: "14px 32px",
+                  borderRadius: 10,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                Get Started Free
+              </button>
+              <a
+                href="/dashboard?demo=1"
+                style={{
+                  display: "inline-block",
+                  background: "transparent",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                  padding: "14px 32px",
+                  borderRadius: 10,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                View Live Demo →
+              </a>
+            </div>
           )}
         </div>
 

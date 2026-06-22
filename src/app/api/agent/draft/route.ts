@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { isDemoRequest, getDemoUserId } from "@/lib/demo";
 import { execFile } from "child_process";
 import { promisify } from "util";
 
@@ -14,9 +15,23 @@ const SCRIPTS_DIR =
 const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let userId: string;
+
+  if (isDemoRequest(req)) {
+    const demoId = await getDemoUserId();
+    if (!demoId) {
+      return NextResponse.json(
+        { error: "Demo user not seeded. Run `npx prisma db seed`." },
+        { status: 404 }
+      );
+    }
+    userId = demoId;
+  } else {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    userId = session.user.id;
   }
 
   let invoiceId: string;
@@ -34,13 +49,13 @@ export async function POST(req: Request) {
     );
   }
 
-  // Verify the invoice belongs to the signed-in user before letting the
+  // Verify the invoice belongs to the acting user before letting the
   // agent scripts touch it.
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: { userId: true },
   });
-  if (!invoice || invoice.userId !== session.user.id) {
+  if (!invoice || invoice.userId !== userId) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 

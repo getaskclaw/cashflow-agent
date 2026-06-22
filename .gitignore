@@ -7,3 +7,4 @@ node_modules/
 logs/
 test-results/
 screenshots/
+tsconfig.tsbuildinfo

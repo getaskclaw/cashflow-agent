@@ -103,14 +103,20 @@ export default function DashboardPage() {
   const [scheduleDate, setScheduleDate] = useState<string>(defaultScheduleDate());
   const [scheduling, setScheduling] = useState(false);
 
+  const isDemo = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("demo") === "1";
+  }, []);
+  const demoQuery = isDemo ? "?demo=1" : "";
+
   const refresh = useCallback(() => {
     setLoading(true);
-    return fetch("/api/dashboard")
+    return fetch(`/api/dashboard${demoQuery}`)
       .then((r) => r.json())
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [demoQuery]);
 
   useEffect(() => {
     refresh();
@@ -142,7 +148,7 @@ export default function DashboardPage() {
   const openDraft = useCallback(async (invoice: Invoice) => {
     setModal({ kind: "loading", invoice });
     try {
-      const res = await fetch("/api/agent/draft", {
+      const res = await fetch(`/api/agent/draft${demoQuery}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ invoiceId: invoice.id }),
@@ -162,7 +168,7 @@ export default function DashboardPage() {
       const msg = e instanceof Error ? e.message : String(e);
       setModal({ kind: "error", invoice, message: msg });
     }
-  }, []);
+  }, [demoQuery]);
 
   const approveDraft = useCallback(async () => {
     if (modal.kind !== "ready" && modal.kind !== "approving") return;
@@ -170,7 +176,7 @@ export default function DashboardPage() {
     const { invoice, result, draftText } = modal;
     setModal({ kind: "approving", invoice, result, editing: false, draftText });
     try {
-      const res = await fetch("/api/agent/approve", {
+      const res = await fetch(`/api/agent/approve${demoQuery}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -189,13 +195,13 @@ export default function DashboardPage() {
       setModal({ kind: "ready", invoice, result, editing: false, draftText });
       setToast({ kind: "error", message: `Approve failed: ${msg}` });
     }
-  }, [modal, refresh]);
+  }, [modal, refresh, demoQuery]);
 
   const runSchedule = useCallback(async () => {
     if (!scheduleFor) return;
     setScheduling(true);
     try {
-      const res = await fetch("/api/agent/schedule", {
+      const res = await fetch(`/api/agent/schedule${demoQuery}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ invoiceId: scheduleFor.id, date: scheduleDate }),
@@ -213,12 +219,12 @@ export default function DashboardPage() {
     } finally {
       setScheduling(false);
     }
-  }, [scheduleFor, scheduleDate]);
+  }, [scheduleFor, scheduleDate, demoQuery]);
 
   if (loading) {
     return (
       <>
-        <Header />
+        <Header demo={isDemo} />
         <div style={{ textAlign: "center", padding: 80, color: "var(--text-dim)" }}>
           Loading...
         </div>
@@ -234,7 +240,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Header />
+      <Header demo={isDemo} />
       <main style={{ maxWidth: 900, margin: "0 auto", padding: "24px" }}>
         {/* Stripe Connection */}
         <div style={{
