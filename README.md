@@ -35,6 +35,19 @@ Overdue invoice
 
 This loop — read, write, check, understand, follow-up — is what makes it an **agent**, not a mail merge.
 
+## How It Works
+
+**One product. Two layers.**
+
+| Layer | What it does | What the user sees |
+|---|---|---|
+| **The Agent** (Hermes) | Reads messages, writes follow-ups, understands replies, schedules next checks | Nothing — it just works in the background |
+| **The Dashboard** (web app) | Shows the money board, invoice list, and action buttons | A clean website they log into |
+
+The user never needs to know Hermes exists. They just see a dashboard. When they click "draft follow-up," an agent wakes up, reads the full conversation, decides the tone, writes the email, and schedules a check for next Tuesday. They just approve.
+
+**That's the product: you click one button, an agent does the thinking.**
+
 ---
 
 ## Why This Matters
@@ -51,24 +64,7 @@ Getting paid is the **#1 problem** with the **fewest solutions**. That is what w
 
 ---
 
-## How It Works
-
-```
-┌─────────────────────────────────────────────┐
-│  Website (Next.js)                          │
-│  Dashboard · Money board · Action buttons   │
-│  Stripe payments · Webhooks                 │
-├─────────────────────────────────────────────┤
-│  Database (SQLite)                          │
-│  Customers · Invoices · Messages            │
-├─────────────────────────────────────────────┤
-│  Hermes Agent (the brain)                   │
-│  Reads messages · Writes follow-ups         │
-│  Understands replies · Schedules checks     │
-└─────────────────────────────────────────────┘
-```
-
-### What we use
+## What We Use
 
 | Part | Tool |
 |---|---|
@@ -157,7 +153,11 @@ npm run dev
 
 ## 中文简介
 
-Cashflow Agent 是一个帮你收钱的 AI 助手。它读取你和客户的聊天记录，写一封个性化的催款信，你确认后发出去。客户回复后，它会理解对方的意思——承诺付款、有疑问、还是想争论——然后更新状态，安排下次跟进。
+Cashflow Agent 是一个帮你收钱的 AI 助手。
+
+**它是怎么工作的：** 你点击一个按钮，后台的 AI 代理会读取你和客户的全部聊天记录，判断该用什么语气，写一封个性化的催款信，然后安排好下次跟进的时间。你只需要确认一下就行。
+
+用户不需要知道 Hermes 是什么。他们只看到一个干净的网页面板。代理在后台做所有的思考。
 
 **一句话：** QuickBooks 只会群发提醒。Cashflow Agent 记得你们聊过什么。
 
