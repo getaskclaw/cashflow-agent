@@ -53,6 +53,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
+  // Record the approved outbound communication
   const communication = await prisma.communication.create({
     data: {
       invoiceId,
@@ -63,6 +64,26 @@ export async function POST(req: Request) {
       approved: true,
       sentAt: new Date(),
       parsedSummary: tone ? `Approved draft (tone: ${tone})` : "Approved draft",
+    },
+  });
+
+  // Record agent spending — symbolic email delivery cost
+  // This is the "spend" story for the hackathon: the agent pays for
+  // its own email delivery via Stripe. $0.25 per send.
+  const invoiceRecord = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { invoiceNumber: true },
+  });
+
+  await prisma.transaction.create({
+    data: {
+      userId,
+      stripeChargeId: `agent_send_${invoiceId}_${Date.now()}`,
+      amount: 25, // $0.25 in cents — symbolic email delivery cost
+      currency: "usd",
+      customerName: "Email Delivery (SendGrid)",
+      description: `Agent email send — ${invoiceRecord?.invoiceNumber || invoiceId}`,
+      createdAt: new Date(),
     },
   });
 
