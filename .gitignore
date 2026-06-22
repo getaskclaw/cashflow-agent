@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.next-prod/
+*.db
+.env
+.env.production
+logs/
+test-results/
+screenshots/
