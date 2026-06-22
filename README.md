@@ -1,128 +1,111 @@
 # Cashflow Agent 💰
 
-> **QuickBooks reminds. Cashflow Agent remembers the conversation.**
+> QuickBooks sends reminders. Cashflow Agent remembers what you talked about.
 
-A Hermes-powered AI agent that reads your customer conversations and writes the follow-up that actually gets you paid.
+A smart helper that reads your customer messages and writes follow-ups that get you paid.
 
-Built for the [Hermes Agent Accelerated Business Hackathon](https://nousresearch.com) presented by **Nous Research × NVIDIA × Stripe**.
-
-[![X Post](https://img.shields.io/badge/Follow-@GetAskClaw-1DA1F2?logo=x)](https://x.com/GetAskClaw/status/2068908108114760150)
+Built for [Hermes Agent Accelerated Business Hackathon](https://nousresearch.com) by **Nous Research × NVIDIA × Stripe**.
 
 ---
 
 ## The Problem
 
-Small business owners spend hours chasing payment. QuickBooks and Stripe send generic reminders that customers ignore. But a follow-up that *references a specific conversation* — "Hey John, you said you'd pay Friday but I haven't seen it yet" — actually works.
+Small business owners spend hours chasing payments. Stripe and QuickBooks send the same message to everyone. Customers ignore them.
 
-The problem: owners don't have time to hand-write every follow-up.
+But a message that says *"Hey John, last week you said you'd pay on Friday. I still don't see the money"* — that works.
 
-## The Solution
+The problem: owners don't have time to write each one by hand.
 
-An AI agent that lives in the loop:
+## What This Does
+
+When a customer hasn't paid:
 
 ```
-Overdue invoice detected
-  → Agent reads full email/call thread with customer
-  → Understands: what was promised? what tone fits?
-  → Drafts personalized follow-up referencing prior conversation
-  → Human approves (always)
+Overdue invoice
+  → Agent reads your past messages with this customer
+  → Understands: what did they promise? what tone works?
+  → Writes a personal follow-up for you to check
+  → You say "send it"
   → Customer replies
-  → Agent parses the reply: promised / disputed / question / ignored
-  → Updates status + promise date
-  → Schedules next check via Hermes cron
-  → Escalates tone if still unpaid
-  → Stripe webhook fires → marks resolved
+  → Agent reads the reply: promised / question / problem
+  → Updates the status
+  → Sets a reminder to check again
+  → Stripe confirms payment → done
 ```
 
-This closed loop — **read context → draft → human gate → parse reply → schedule next** — is what makes it an agent, not a mail merge.
+This loop — read, write, check, understand, follow-up — is what makes it an **agent**, not a mail merge.
+
+---
 
 ## Why This Matters
 
-Our data analysis of **14,000+ small business pain signals** (Reddit, X, forums) found:
+We looked at **14,000+ small business owner problems** on Reddit, X, and forums. Here is what we found:
 
-| Pain Signal | Count | Solutions Available |
+| Problem | People talking about it | Tools that help |
 |---|---|---|
-| **Cash flow / AR** | **1,165** | **11** |
-| Customer acquisition | 980 | 47 |
-| Hiring & retention | 720 | 32 |
+| **Getting paid / cash flow** | **1,165** | **11** |
+| Finding new customers | 980 | 47 |
+| Hiring people | 720 | 32 |
 
-Cash flow / AR is the #1 pain with the **fewest solutions**. That's the gap we're closing. Read the full pain analysis [on X](https://x.com/GetAskClaw/status/2068908108114760150).
+Getting paid is the **#1 problem** with the **fewest solutions**. That is what we are fixing.
 
 ---
 
-## Architecture
+## How It Works
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Next.js 14 (App Router)                    │
-│  Dashboard · Cashflow Board · Agent Actions │
-│  Stripe Connect OAuth · Webhooks            │
+│  Website (Next.js)                          │
+│  Dashboard · Money board · Action buttons   │
+│  Stripe payments · Webhooks                 │
 ├─────────────────────────────────────────────┤
-│  Prisma + SQLite                             │
-│  Customers · Invoices · Communications       │
+│  Database (SQLite)                          │
+│  Customers · Invoices · Messages            │
 ├─────────────────────────────────────────────┤
-│  Hermes Agent (skill + cron + tools)         │
-│  read_customer_thread · draft_followup       │
-│  parse_reply · create_payment_link           │
-│  schedule_followup · draft_quote             │
+│  Hermes Agent (the brain)                   │
+│  Reads messages · Writes follow-ups         │
+│  Understands replies · Schedules checks     │
 └─────────────────────────────────────────────┘
 ```
 
-### Tech Stack
+### What we use
 
-| Layer | Technology |
+| Part | Tool |
 |---|---|
-| Frontend | Next.js 14 (App Router) + Tailwind CSS |
-| Database | SQLite via Prisma ORM |
-| Auth | NextAuth (email login, Google OAuth) |
-| Payments | Stripe Connect OAuth + Payment Links + Webhooks |
-| Agent | Hermes Agent (skill + cron + structured tools) |
-
-### Data Model
-
-The three core entities:
-
-```
-Customer ──→ Invoice ──→ Communication
-  │              │
-  name        amount        direction (outbound/inbound)
-  email       dueDate       content
-  phone       status        agentDraft?
-              promiseDate   parsedStatus (promised/disputed/question/ignored)
-              paymentLinkId parsedPromiseDate
-              stripePaymentId
-```
-
-Status machine: `pending → overdue → promised → paid` with `disputed` and `question` forks.
+| Website | Next.js + Tailwind CSS |
+| Database | SQLite via Prisma |
+| Login | NextAuth (email + Google) |
+| Payments | Stripe |
+| Agent | Hermes Agent |
 
 ---
 
-## Build Plan (6 Days)
+## 6-Day Build Plan
 
-| Day | Focus |
+| Day | What we build |
 |---|---|
-| **1** (Mon 6/23) | Fork TaxAssist, set up DB schema, seed demo data |
-| **2** (Tue 6/24) | Hermes agent skill — read thread, draft follow-up, parse reply, cron schedule |
-| **3** (Wed 6/25) | Stripe payment links + webhook handler |
-| **4** (Thu 6/26) | Dashboard — cashflow board, invoice list, agent actions panel |
-| **5** (Fri 6/27) | Quote draft layer + full integration test |
-| **6** (Sat 6/28) | Polish, record 1-3 min demo video |
-| **Submit** (Sun 6/29) | Tweet video + Discord submission |
+| **1** (Mon 6/23) | Copy the project, set up database, add demo data |
+| **2** (Tue 6/24) | Build the agent: read messages, write follow-ups, understand replies |
+| **3** (Wed 6/25) | Stripe payment links + payment alerts |
+| **4** (Thu 6/26) | Dashboard: money board, invoice list, agent action buttons |
+| **5** (Fri 6/27) | Quote system + full test of everything |
+| **6** (Sat 6/28) | Polish, record 1-3 min demo |
+| **Submit** (Sun 6/29) | Share video, fill in submission |
 
 ---
 
-## Three Screens
+## 3 Main Screens
 
-### 1. Inbox Review — What the agent found
+### 1. Inbox — What the agent found
 ```
 Found:
-- New quote request from John (roof repair, 120 sqm)
+- New request from John (roof repair, 120 sqm)
 - Invoice #1042 overdue by 12 days ($3,200)
-- Payment promise from ACME Corp ("will pay Friday")
+- ACME Corp said "will pay Friday"
 ```
 
 ### 2. Cashflow Board — Money status
-| Metric | Amount |
+| Item | Amount |
 |---|---|
 | Expected this week | $8,420 |
 | Overdue | $3,200 |
@@ -130,46 +113,53 @@ Found:
 | At risk | $2,400 |
 
 ### 3. Agent Actions — What the agent wants to do
-- [Draft quote] → for John's roof repair inquiry
+- [Write quote] → for John's roof repair
 - [Create link] → Stripe payment link for deposit
-- [Send reminder] → personalized follow-up for invoice #1042
-- [Mark paid] → Stripe webhook confirmed payment
+- [Send reminder] → personal message for invoice #1042
+- [Mark paid] → Stripe confirmed the payment
 
 ---
 
 ## Getting Started
 
 ```bash
-# Clone
+# Download
 git clone https://github.com/getaskclaw/cashflow-agent.git
 cd cashflow-agent
 
 # Install
 npm install
 
-# Set up env
+# Set up .env file (ask for the keys)
 cp .env.example .env
-# Add DATABASE_URL, NEXTAUTH_SECRET, STRIPE_*
 
-# Push DB schema
+# Set up database
 npx prisma db push
 
-# Seed demo data
+# Add demo data
 npx tsx prisma/seed.ts
 
-# Run dev
+# Start
 npm run dev
 ```
 
 ---
 
-## What We're NOT Building
+## What We Are NOT Building
 
-- ❌ Full CRM (no contact management, no pipeline, no deal tracking)
-- ❌ Lead scraping (no outbound prospecting)
-- ❌ QuickBooks/Xero sync (no accounting integration)
-- ❌ Multi-channel reminders (email only for MVP)
-- ❌ Autonomous sending without approval (human gate always)
+- ❌ Full customer manager (no deal tracking)
+- ❌ Finding new customers (no prospecting)
+- ❌ QuickBooks/Xero sync
+- ❌ SMS or phone calls (email only for now)
+- ❌ Sending without your OK (you always check first)
+
+---
+
+## 中文简介
+
+Cashflow Agent 是一个帮你收钱的 AI 助手。它读取你和客户的聊天记录，写一封个性化的催款信，你确认后发出去。客户回复后，它会理解对方的意思——承诺付款、有疑问、还是想争论——然后更新状态，安排下次跟进。
+
+**一句话：** QuickBooks 只会群发提醒。Cashflow Agent 记得你们聊过什么。
 
 ---
 
