@@ -4,7 +4,11 @@
 
 An AI agent that reads your customer threads and writes the follow-up that actually gets you paid.
 
-Built for the [Hermes Agent Accelerated Business Hackathon](https://nousresearch.com) — **Nous Research × NVIDIA × Stripe**.
+Built for the [Hermes Agent Accelerated Business Hackathon](https://x.com/NousResearch/status/2066921443548348436) — **Nous Research × NVIDIA × Stripe**
+
+[![Announcement](https://img.shields.io/badge/🚀_Hackathon-%40NousResearch-1DA1F2?logo=x)](https://x.com/NousResearch/status/2066921443548348436)
+[![Build in Public](https://img.shields.io/badge/📢_Build_in_Public-%40GetAskClaw-1DA1F2?logo=x)](https://x.com/GetAskClaw/status/2068908108114760150)
+[![Discuss](https://img.shields.io/badge/💬_Discuss-Reddit-FF4500?logo=reddit)](https://www.reddit.com/r/hermesagent/comments/1u88w9m/)
 
 ---
 
