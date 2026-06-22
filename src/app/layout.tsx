@@ -3,9 +3,9 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TaxAssist — Sales Tax & VAT for SaaS",
+  title: "Cashflow Agent — Reply-aware collections",
   description:
-    "Automatically calculate sales tax and VAT for your SaaS transactions. Connect Stripe, see your tax liability instantly.",
+    "Connect Stripe and let an AI agent read your customer threads, draft the follow-up that actually gets you paid, and track every invoice.",
 };
 
 export default function RootLayout({

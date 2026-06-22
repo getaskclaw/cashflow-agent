@@ -26,10 +26,10 @@ export default function HomePage() {
             letterSpacing: "-0.5px",
           }}
         >
-          Sales tax & VAT{" "}
-          <span style={{ color: "var(--accent)" }}>automated</span>
+          The follow-up that{" "}
+          <span style={{ color: "var(--accent)" }}>gets you paid</span>
           <br />
-          for your SaaS
+          written for you
         </h1>
         <p
           style={{
@@ -41,9 +41,10 @@ export default function HomePage() {
             margin: "0 auto 40px",
           }}
         >
-          Connect your Stripe account and instantly see the sales tax, VAT, and
-          GST you owe for every transaction. No spreadsheets. No manual
-          calculation. No tax software headache.
+          Connect your Stripe account and let an AI agent read your customer
+          threads, draft a personal follow-up for every overdue invoice, and
+          track each promise. No spreadsheets. No generic reminders. No chasing
+          payments by hand.
         </p>
 
         <div
@@ -69,8 +70,8 @@ export default function HomePage() {
               One-click Stripe sync
             </h3>
             <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>
-              Connect your Stripe account. We pull your transactions and
-              calculate tax for each one automatically.
+              Connect your Stripe account. We pull your invoices and the agent
+              reads each customer thread automatically.
             </p>
           </div>
 
@@ -85,11 +86,12 @@ export default function HomePage() {
           >
             <div style={{ fontSize: 24, marginBottom: 8 }}>🌍</div>
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-              Global coverage
+              Reply-aware follow-ups
             </h3>
             <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>
-              All 50 US states + local rates, EU VAT, Canadian GST/HST, and 20+
-              other countries. Updated from official government sources.
+              The agent reads what was promised, picks the right tone, and
+              drafts a follow-up that actually gets a response — then parses the
+              reply and schedules the next check.
             </p>
           </div>
 
@@ -104,11 +106,11 @@ export default function HomePage() {
           >
             <div style={{ fontSize: 24, marginBottom: 8 }}>📊</div>
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-              Tax reports
+              Cashflow board
             </h3>
             <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>
-              Monthly summaries by jurisdiction. Export to CSV. Know exactly how
-              much to remit — no surprises.
+              See expected, overdue, collected, and at-risk money at a glance.
+              Know exactly which invoices need a nudge — no surprises.
             </p>
           </div>
         </div>

@@ -17,7 +17,7 @@ export function Header() {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
         <span style={{ fontWeight: 800, fontSize: 18 }}>
-          <span style={{ color: "var(--accent)" }}>Tax</span>Assist
+          <span style={{ color: "var(--accent)" }}>Cashflow</span> Agent
         </span>
         {session && (
           <nav style={{ display: "flex", gap: 16, fontSize: 14 }}>

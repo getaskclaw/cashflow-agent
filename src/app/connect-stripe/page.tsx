@@ -95,7 +95,7 @@ export default function ConnectStripePage() {
           <strong style={{ color: "var(--text)" }}>What happens when you connect?</strong>
           <ol style={{ margin: "8px 0 0", paddingLeft: 16 }}>
             <li>You&apos;re redirected to Stripe to authorize access (read-only for transactions)</li>
-            <li>We sync your recent charges and calculate tax for each</li>
+            <li>We sync your recent charges so the agent can read each customer thread</li>
             <li>Data stays in your account — we never store raw Stripe credentials</li>
             <li>You can sync manually anytime or set up automatic sync</li>
           </ol>

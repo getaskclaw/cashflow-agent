@@ -2,6 +2,7 @@
   "name": "cashflow-agent",
   "version": "0.1.0",
   "private": true,
+  "description": "Cashflow Agent - reply-aware collections",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

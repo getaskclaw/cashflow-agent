@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getStripeClient } from "@/lib/stripe";
-import { calculateTax, getRateForJurisdiction } from "@/lib/tax/rates";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -93,52 +92,28 @@ async function syncTransactions(
       const country = address?.country || "US";
       const state = address?.state || null;
 
-      // Calculate tax
-      const taxResult = calculateTax(charge.amount, country, state);
-
-      // Create transaction and tax calculation in a transaction
-      await prisma.$transaction(async (tx) => {
-        const txn = await tx.transaction.create({
-          data: {
-            userId,
-            stripeChargeId: charge.id,
-            amount: charge.amount,
-            currency: charge.currency,
-            customerName: billingDetails?.name || null,
-            customerEmail: billingDetails?.email || null,
-            customerCountry: country,
-            customerState: state,
-            customerZip: address?.postal_code || null,
-            customerCity: address?.city || null,
-            description: charge.description || null,
-            metadata: JSON.stringify({
-              stripeChargeCreated: new Date(charge.created * 1000).toISOString(),
-              paid: charge.paid,
-              refunded: charge.refunded,
-              paymentMethod: charge.payment_method_details?.type || null,
-            }),
-            createdAt: new Date(charge.created * 1000),
-          },
-        });
-
-        if (taxResult.rate) {
-          await tx.taxCalculation.create({
-            data: {
-              transactionId: txn.id,
-              userId,
-              jurisdictionType: taxResult.rate.jurisdictionType,
-              jurisdictionName: taxResult.rate.jurisdictionName,
-              jurisdictionCode: taxResult.rate.jurisdictionCode,
-              taxRate: taxResult.rate.rate,
-              taxAmount: taxResult.taxAmountCents,
-              taxableAmount: taxResult.taxableAmountCents,
-              stateRate: taxResult.rate.stateRate || null,
-              localRate: taxResult.rate.localRate || null,
-              countryRate: taxResult.rate.countryRate || null,
-              status: "calculated",
-            },
-          });
-        }
+      // Create transaction record
+      await prisma.transaction.create({
+        data: {
+          userId,
+          stripeChargeId: charge.id,
+          amount: charge.amount,
+          currency: charge.currency,
+          customerName: billingDetails?.name || null,
+          customerEmail: billingDetails?.email || null,
+          customerCountry: country,
+          customerState: state,
+          customerZip: address?.postal_code || null,
+          customerCity: address?.city || null,
+          description: charge.description || null,
+          metadata: JSON.stringify({
+            stripeChargeCreated: new Date(charge.created * 1000).toISOString(),
+            paid: charge.paid,
+            refunded: charge.refunded,
+            paymentMethod: charge.payment_method_details?.type || null,
+          }),
+          createdAt: new Date(charge.created * 1000),
+        },
       });
     }
 

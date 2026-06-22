@@ -110,7 +110,7 @@ export default function DashboardPage() {
             <p style={{ color: "var(--text-dim)", fontSize: 13, margin: 0 }}>
               {data?.connected
                 ? `Connected to account ${data.stripeAccountId?.slice(0, 12)}...`
-                : "Connect your Stripe account to start tracking taxes"}
+                : "Connect your Stripe account to start tracking your cashflow"}
             </p>
           </div>
           {data?.connected ? (
