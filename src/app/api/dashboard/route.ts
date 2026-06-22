@@ -15,52 +15,67 @@ export async function GET() {
     where: { userId },
   });
 
-  const transactions = await prisma.transaction.findMany({
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+  const invoices = await prisma.invoice.findMany({
     where: { userId },
-    include: { taxCalculation: true },
-    orderBy: { createdAt: "desc" },
-    take: 50,
+    include: {
+      customer: { select: { name: true, email: true } },
+      communications: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { content: true, direction: true, createdAt: true },
+      },
+    },
+    orderBy: [
+      { status: "asc" },
+      { dueDate: "asc" },
+    ],
   });
 
-  const stats = await prisma.$transaction(async (tx) => {
-    const totalRevenue = await tx.transaction.aggregate({
-      where: { userId },
-      _sum: { amount: true },
-    });
-    const totalTax = await tx.taxCalculation.aggregate({
-      where: { userId },
-      _sum: { taxAmount: true },
-    });
-    const count = await tx.transaction.count({ where: { userId } });
-    const taxCount = await tx.taxCalculation.count({ where: { userId } });
-    return { totalRevenue, totalTax, count, taxCount };
-  });
+  const expectedThisWeek = invoices
+    .filter((i) => i.status === "pending" && i.dueDate >= startOfWeek && i.dueDate <= endOfWeek)
+    .reduce((sum, i) => sum + i.amount, 0);
+
+  const overdue = invoices
+    .filter((i) => i.status === "overdue")
+    .reduce((sum, i) => sum + i.amount, 0);
+
+  const collectedThisWeek = invoices
+    .filter((i) => i.status === "paid" && i.paidAt && i.paidAt >= startOfWeek)
+    .reduce((sum, i) => sum + i.amount, 0);
+
+  const atRisk = invoices
+    .filter((i) => i.status === "promised" && i.promiseDate && i.promiseDate < now)
+    .reduce((sum, i) => sum + i.amount, 0);
 
   return NextResponse.json({
     connected: !!connection,
     stripeAccountId: connection?.stripeAccountId || null,
-    stats: {
-      totalRevenueCents: stats.totalRevenue._sum.amount || 0,
-      totalTaxCents: stats.totalTax._sum.taxAmount || 0,
-      transactionCount: stats.count,
-      taxCalculatedCount: stats.taxCount,
+    cashflow: {
+      expectedThisWeek,
+      overdue,
+      collectedThisWeek,
+      atRisk,
     },
-    transactions: transactions.map((t) => ({
-      id: t.id,
-      amount: t.amount,
-      currency: t.currency,
-      customerName: t.customerName,
-      customerCountry: t.customerCountry,
-      createdAt: t.createdAt.toISOString(),
-      taxCalculation: t.taxCalculation
-        ? {
-            jurisdictionName: t.taxCalculation.jurisdictionName,
-            jurisdictionCode: t.taxCalculation.jurisdictionCode,
-            taxRate: t.taxCalculation.taxRate,
-            taxAmount: t.taxCalculation.taxAmount,
-            status: t.taxCalculation.status,
-          }
-        : null,
+    invoices: invoices.map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      amount: inv.amount,
+      currency: inv.currency,
+      description: inv.description,
+      status: inv.status,
+      dueDate: inv.dueDate.toISOString(),
+      createdAt: inv.createdAt.toISOString(),
+      promiseDate: inv.promiseDate?.toISOString() || null,
+      paidAt: inv.paidAt?.toISOString() || null,
+      customer: inv.customer,
+      lastCommunication: inv.communications[0] || null,
     })),
   });
 }

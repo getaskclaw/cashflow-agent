@@ -45,7 +45,8 @@ model User {
 
   stripeConnection StripeConnection?
   transactions     Transaction[]
-  taxCalculations  TaxCalculation[]
+  customers        Customer[]
+  invoices         Invoice[]
 }
 
 model VerificationToken {
@@ -86,34 +87,68 @@ model Transaction {
   metadata        String?  // JSON blob
   createdAt       DateTime
   syncedAt        DateTime @default(now())
-
-  taxCalculation TaxCalculation?
 }
 
-model TaxCalculation {
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  email     String
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+
+  @@unique([userId, email])
+}
+
+model Invoice {
   id              String   @id @default(cuid())
-  transactionId   String   @unique
-  transaction     Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id])
 
-  // Jurisdiction info
-  jurisdictionType  String   // "us_state", "eu_country", "ca_province", "au", "other"
-  jurisdictionName  String   // e.g. "California", "Germany"
-  jurisdictionCode  String   // e.g. "US-CA", "DE"
+  invoiceNumber   String   @unique
+  amount          Int      // cents
+  currency        String   @default("usd")
+  description     String?
 
-  // Rate & amount
-  taxRate     Float    // e.g. 0.0875 for 8.75%
-  taxAmount   Int      // calculated tax in cents
-  taxableAmount Int    // amount subject to tax in cents
+  dueDate         DateTime
+  createdAt       DateTime @default(now())
 
-  // Breakdown
-  stateRate   Float?
-  localRate   Float?
-  countryRate Float?
+  // Status: pending → overdue → promised → paid
+  status          String   @default("pending")
+  promiseDate     DateTime?
 
-  // Status
-  status      String   @default("calculated") // calculated, filed, exempt
-  notes       String?
-  calculatedAt DateTime @default(now())
+  // Stripe
+  paymentLinkId   String?
+  stripePaymentId String?
+  paidAt          DateTime?
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@index([userId, status])
+}
+
+model Communication {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  direction     String   // "outbound" (we sent) or "inbound" (customer replied)
+  channel       String   @default("email")
+  content       String
+  agentDraft    Boolean  @default(false)
+  approved      Boolean  @default(false)
+  sentAt        DateTime?
+
+  // Parsed reply data
+  parsedStatus        String?   // promised / disputed / question / ignored
+  parsedPromiseDate   DateTime?
+  parsedSummary       String?
+
+  createdAt     DateTime @default(now())
 }
