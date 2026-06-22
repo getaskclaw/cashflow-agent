@@ -26,10 +26,11 @@ Invoice becomes overdue
   → Figures out: what was promised? what tone fits?
   → Drafts a personal follow-up
   → You approve it
-  → Customer replies
+  → Customer replies → you paste it in
   → Agent parses the reply: promised / disputed / question / ignored
-  → Updates the invoice status
-  → Schedules the next check
+  → Updates the invoice status and promise date
+  → Promise tracker shows countdown to each promise
+  → Schedules the next check for the day after the promise
   → Still unpaid? Escalates the tone
   → Stripe webhook confirms payment → done
 ```
@@ -89,6 +90,7 @@ Getting paid is the **#1 pain** with the **fewest solutions**. That's the gap we
 | **4** | Agent actions UI: Draft → modal → Approve/Edit/Cancel → schedule check |
 | **5** | Demo mode (`?demo=1`) — works without login or Stripe keys |
 | **6** | README, .env.example, polished dashboard |
+| **7** | **Reply loop closed**: Record Reply button → agent parses customer reply → classifies (promised/disputed/question/ignored) → updates invoice status → Promise Tracker panel with urgency countdown → Thread drawer showing full conversation history with parsed badges |
 
 ### Next
 
