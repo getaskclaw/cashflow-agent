@@ -65,7 +65,7 @@ Getting paid is the **#1 pain** with the **fewest solutions**. That's the gap we
 
 | Layer | Tool |
 |---|---|
-| Frontend | Next.js 14 + Tailwind CSS |
+| Frontend | Next.js + Tailwind CSS |
 | Database | SQLite via Prisma |
 | Auth | NextAuth (email + Google) |
 | Payments | Stripe |
