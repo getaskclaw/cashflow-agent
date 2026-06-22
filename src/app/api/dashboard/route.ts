@@ -24,73 +24,81 @@ export async function GET(req: Request) {
     userId = session.user.id;
   }
 
-  const connection = await prisma.stripeConnection.findUnique({
-    where: { userId },
-  });
+  try {
+    const connection = await prisma.stripeConnection.findUnique({
+      where: { userId },
+    });
 
-  const now = new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
-  startOfWeek.setHours(0, 0, 0, 0);
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 7);
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
 
-  const invoices = await prisma.invoice.findMany({
-    where: { userId },
-    include: {
-      customer: { select: { name: true, email: true } },
-      communications: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { content: true, direction: true, createdAt: true },
+    const invoices = await prisma.invoice.findMany({
+      where: { userId },
+      include: {
+        customer: { select: { name: true, email: true } },
+        communications: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { content: true, direction: true, createdAt: true },
+        },
       },
-    },
-    orderBy: [
-      { status: "asc" },
-      { dueDate: "asc" },
-    ],
-  });
+      orderBy: [
+        { status: "asc" },
+        { dueDate: "asc" },
+      ],
+    });
 
-  const expectedThisWeek = invoices
-    .filter((i) => i.status === "pending" && i.dueDate >= startOfWeek && i.dueDate <= endOfWeek)
-    .reduce((sum, i) => sum + i.amount, 0);
+    const expectedThisWeek = invoices
+      .filter((i) => i.status === "pending" && i.dueDate >= startOfWeek && i.dueDate <= endOfWeek)
+      .reduce((sum, i) => sum + i.amount, 0);
 
-  const overdue = invoices
-    .filter((i) => i.status === "overdue")
-    .reduce((sum, i) => sum + i.amount, 0);
+    const overdue = invoices
+      .filter((i) => i.status === "overdue")
+      .reduce((sum, i) => sum + i.amount, 0);
 
-  const collectedThisWeek = invoices
-    .filter((i) => i.status === "paid" && i.paidAt && i.paidAt >= startOfWeek)
-    .reduce((sum, i) => sum + i.amount, 0);
+    const collectedThisWeek = invoices
+      .filter((i) => i.status === "paid" && i.paidAt && i.paidAt >= startOfWeek)
+      .reduce((sum, i) => sum + i.amount, 0);
 
-  const atRisk = invoices
-    .filter((i) => i.status === "promised" && i.promiseDate && i.promiseDate < now)
-    .reduce((sum, i) => sum + i.amount, 0);
+    const atRisk = invoices
+      .filter((i) => i.status === "promised" && i.promiseDate && i.promiseDate < now)
+      .reduce((sum, i) => sum + i.amount, 0);
 
-  return NextResponse.json({
-    connected: !!connection,
-    stripeAccountId: connection?.stripeAccountId || null,
-    cashflow: {
-      expectedThisWeek,
-      overdue,
-      collectedThisWeek,
-      atRisk,
-    },
-    invoices: invoices.map((inv) => ({
-      id: inv.id,
-      invoiceNumber: inv.invoiceNumber,
-      amount: inv.amount,
-      currency: inv.currency,
-      description: inv.description,
-      status: inv.status,
-      dueDate: inv.dueDate.toISOString(),
-      createdAt: inv.createdAt.toISOString(),
-      promiseDate: inv.promiseDate?.toISOString() || null,
-      paidAt: inv.paidAt?.toISOString() || null,
-      customer: inv.customer,
-      lastCommunication: inv.communications[0] || null,
-    })),
-  });
+    return NextResponse.json({
+      connected: !!connection,
+      stripeAccountId: connection?.stripeAccountId || null,
+      cashflow: {
+        expectedThisWeek,
+        overdue,
+        collectedThisWeek,
+        atRisk,
+      },
+      invoices: invoices.map((inv) => ({
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        amount: inv.amount,
+        currency: inv.currency,
+        description: inv.description,
+        status: inv.status,
+        dueDate: inv.dueDate.toISOString(),
+        createdAt: inv.createdAt.toISOString(),
+        promiseDate: inv.promiseDate?.toISOString() || null,
+        paidAt: inv.paidAt?.toISOString() || null,
+        customer: inv.customer,
+        lastCommunication: inv.communications[0] || null,
+      })),
+    });
+  } catch (error: any) {
+    console.error("Dashboard API error:", error);
+    return NextResponse.json(
+      { error: error.message || "Dashboard data failed" },
+      { status: 500 }
+    );
+  }
 }
 
 export const dynamic = "force-dynamic";

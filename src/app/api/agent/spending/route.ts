@@ -33,49 +33,56 @@ export async function GET(req: Request) {
     userId = session.user.id;
   }
 
-  // Agent spending = transactions with stripeChargeId starting "agent_send_"
-  const spending = await prisma.transaction.findMany({
-    where: {
-      userId,
-      stripeChargeId: { startsWith: "agent_send_" },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
+  try {
+    // Agent spending = transactions with stripeChargeId starting "agent_send_"
+    const spending = await prisma.transaction.findMany({
+      where: {
+        userId,
+        stripeChargeId: { startsWith: "agent_send_" },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
 
-  const totalSpent = spending.reduce((sum, t) => sum + t.amount, 0);
+    const totalSpent = spending.reduce((sum, t) => sum + t.amount, 0);
 
-  // Agent earned = invoices that went from overdue/promised → paid
-  // (i.e., the agent's collections work resulted in payment)
-  const paidInvoices = await prisma.invoice.findMany({
-    where: {
-      userId,
-      status: "paid",
-      paidAt: { not: null },
-    },
-    select: { amount: true, paidAt: true },
-  });
+    // Agent earned = invoices that went from overdue/promised → paid
+    const paidInvoices = await prisma.invoice.findMany({
+      where: {
+        userId,
+        status: "paid",
+        paidAt: { not: null },
+      },
+      select: { amount: true, paidAt: true },
+    });
 
-  const totalEarned = paidInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+    const totalEarned = paidInvoices.reduce((sum, inv) => sum + inv.amount, 0);
 
-  // Net = earned - spent (in cents)
-  const net = totalEarned - totalSpent;
+    // Net = earned - spent (in cents)
+    const net = totalEarned - totalSpent;
 
-  return NextResponse.json({
-    spending: spending.map((t) => ({
-      id: t.id,
-      amount: t.amount,
-      currency: t.currency,
-      description: t.description,
-      createdAt: t.createdAt.toISOString(),
-    })),
-    totals: {
-      spent: totalSpent,
-      earned: totalEarned,
-      net,
-      sendCount: spending.length,
-    },
-  });
+    return NextResponse.json({
+      spending: spending.map((t) => ({
+        id: t.id,
+        amount: t.amount,
+        currency: t.currency,
+        description: t.description,
+        createdAt: t.createdAt.toISOString(),
+      })),
+      totals: {
+        spent: totalSpent,
+        earned: totalEarned,
+        net,
+        sendCount: spending.length,
+      },
+    });
+  } catch (error: any) {
+    console.error("Spending API error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to load spending" },
+      { status: 500 }
+    );
+  }
 }
 
 export const dynamic = "force-dynamic";

@@ -26,45 +26,53 @@ export async function GET(req: Request) {
 
   const now = new Date();
 
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      userId,
-      status: "promised",
-      promiseDate: { not: null },
-    },
-    include: {
-      customer: { select: { name: true, email: true } },
-      communications: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { content: true, createdAt: true },
+  try {
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        userId,
+        status: "promised",
+        promiseDate: { not: null },
       },
-    },
-    orderBy: { promiseDate: "asc" },
-  });
+      include: {
+        customer: { select: { name: true, email: true } },
+        communications: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { content: true, createdAt: true },
+        },
+      },
+      orderBy: { promiseDate: "asc" },
+    });
 
-  const promises = invoices.map((inv) => {
-    const promiseDate = inv.promiseDate!;
-    const diffMs = promiseDate.getTime() - now.getTime();
-    const daysUntil = Math.ceil(diffMs / 86400000);
-    const isBroken = daysUntil < 0;
+    const promises = invoices.map((inv) => {
+      const promiseDate = inv.promiseDate!;
+      const diffMs = promiseDate.getTime() - now.getTime();
+      const daysUntil = Math.ceil(diffMs / 86400000);
+      const isBroken = daysUntil < 0;
 
-    return {
-      invoiceId: inv.id,
-      invoiceNumber: inv.invoiceNumber,
-      amount: inv.amount,
-      currency: inv.currency,
-      customerName: inv.customer.name,
-      customerEmail: inv.customer.email,
-      promiseDate: promiseDate.toISOString(),
-      daysUntil,
-      isBroken,
-      urgency: isBroken ? "broken" : daysUntil <= 2 ? "critical" : daysUntil <= 7 ? "soon" : "ok",
-      lastMessage: inv.communications[0]?.content || null,
-    };
-  });
+      return {
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        amount: inv.amount,
+        currency: inv.currency,
+        customerName: inv.customer.name,
+        customerEmail: inv.customer.email,
+        promiseDate: promiseDate.toISOString(),
+        daysUntil,
+        isBroken,
+        urgency: isBroken ? "broken" : daysUntil <= 2 ? "critical" : daysUntil <= 7 ? "soon" : "ok",
+        lastMessage: inv.communications[0]?.content || null,
+      };
+    });
 
-  return NextResponse.json({ promises, total: promises.length });
+    return NextResponse.json({ promises, total: promises.length });
+  } catch (error: any) {
+    console.error("Promises API error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to load promises" },
+      { status: 500 }
+    );
+  }
 }
 
 export const dynamic = "force-dynamic";

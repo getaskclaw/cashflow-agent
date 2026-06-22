@@ -430,7 +430,7 @@ export default function DashboardPage() {
     setThreadData(null);
     setThreadLoading(true);
     try {
-      const res = await fetch(`/api/agent/thread${demoQuery}&invoiceId=${invoice.id}`);
+      const res = await fetch(`/api/agent/thread${demoQuery ? demoQuery + "&" : "?"}invoiceId=${invoice.id}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
       setThreadData(json as ThreadData);
