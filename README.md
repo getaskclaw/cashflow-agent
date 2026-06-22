@@ -79,15 +79,32 @@ Getting paid is the **#1 pain** with the **fewest solutions**. That's the gap we
 
 ## Build Plan
 
-| Day | Focus |
+### Done (Jun 22 — Day 1)
+
+| Phase | What we built |
 |---|---|
-| **1** (Mon 6/23) | Fork project, DB schema, demo data |
-| **2** (Tue 6/24) | Agent skill: read threads, draft follow-ups, parse replies |
-| **3** (Wed 6/25) | Stripe payment links + webhooks |
-| **4** (Thu 6/26) | Dashboard: cashflow board, invoice list, agent actions |
-| **5** (Fri 6/27) | Quote drafts + end-to-end test |
-| **6** (Sat 6/28) | Polish, record demo |
-| **Submit** (Sun 6/29) | Ship it |
+| **1** | Forked TaxAssist, rebuilt schema (Customer, Invoice, Communication), seeded demo data with John's story |
+| **2** | Hermes agent skill: 5 scripts — read_customer_thread, draft_followup, parse_reply, create_payment_link, schedule_followup |
+| **3** | Stripe webhook handler: `checkout.session.completed` → invoice paid → board updates |
+| **4** | Agent actions UI: Draft → modal → Approve/Edit/Cancel → schedule check |
+| **5** | Demo mode (`?demo=1`) — works without login or Stripe keys |
+| **6** | README, .env.example, polished dashboard |
+
+### Next
+
+| Feature | Why |
+|---|---|
+| **QuickBooks / Xero sync** | Connect existing accounting data without manual import |
+| **SMS reminders** | Customers who don't check email still get nudged |
+| **Multi-language follow-ups** | Agent drafts in the customer's language |
+
+### What we're NOT building
+
+| ❌ | Reason |
+|---|---|
+| CRM / pipeline / deal tracking | Not a sales tool — it's a collections agent |
+| Lead generation | Focus on existing customers with unpaid invoices |
+| Autonomous sending without approval | Human gate always — the agent drafts, you decide |
 
 ---
 
