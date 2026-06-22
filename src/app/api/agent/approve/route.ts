@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isDemoRequest, getDemoUserId } from "@/lib/demo";
+import { sendEmail } from "@/lib/email";
 
 export async function POST(req: Request) {
   let userId: string;
@@ -44,10 +45,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing draftText" }, { status: 400 });
   }
 
-  // Verify ownership.
+  // Verify ownership and get customer + invoice details for email
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
-    select: { userId: true },
+    select: {
+      userId: true,
+      invoiceNumber: true,
+      amount: true,
+      currency: true,
+      customer: { select: { name: true, email: true } },
+    },
   });
   if (!invoice || invoice.userId !== userId) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -67,9 +74,17 @@ export async function POST(req: Request) {
     },
   });
 
+  // Actually send the email via Resend (or simulate in demo mode)
+  // Reply-to address includes invoiceId so inbound replies can be auto-matched
+  const replyToDomain = process.env.EMAIL_DOMAIN || "cashflowagent.dev";
+  const emailResult = await sendEmail({
+    to: invoice.customer.email,
+    subject: `Follow-up: Invoice ${invoice.invoiceNumber} (${new Intl.NumberFormat("en-US", { style: "currency", currency: invoice.currency.toUpperCase() }).format(invoice.amount / 100)})`,
+    text: draftText.trim(),
+    replyTo: `reply+${invoiceId}@${replyToDomain}`,
+  });
+
   // Record agent spending — symbolic email delivery cost
-  // This is the "spend" story for the hackathon: the agent pays for
-  // its own email delivery via Stripe. $0.25 per send.
   const invoiceRecord = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: { invoiceNumber: true },
@@ -81,13 +96,19 @@ export async function POST(req: Request) {
       stripeChargeId: `agent_send_${invoiceId}_${Date.now()}`,
       amount: 25, // $0.25 in cents — symbolic email delivery cost
       currency: "usd",
-      customerName: "Email Delivery (SendGrid)",
+      customerName: emailResult.sent ? "Email Delivery (Resend)" : "Email Delivery (simulated)",
       description: `Agent email send — ${invoiceRecord?.invoiceNumber || invoiceId}`,
       createdAt: new Date(),
     },
   });
 
-  return NextResponse.json({ ok: true, communicationId: communication.id });
+  return NextResponse.json({
+    ok: true,
+    communicationId: communication.id,
+    emailSent: emailResult.sent,
+    emailDemo: emailResult.demo,
+    emailError: emailResult.error,
+  });
 }
 
 export const dynamic = "force-dynamic";

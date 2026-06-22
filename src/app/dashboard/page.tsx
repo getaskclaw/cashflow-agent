@@ -276,6 +276,13 @@ export default function DashboardPage() {
   // Payment link
   const [linkLoading, setLinkLoading] = useState<string | null>(null);
 
+  // Simulation mode
+  const [simMode, setSimMode] = useState(false);
+  const [simStatus, setSimStatus] = useState<string | null>(null);
+
+  // Add invoice modal
+  const [showAddInvoice, setShowAddInvoice] = useState(false);
+
   const isDemo = useMemo(() => {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.search).get("demo") === "1";
@@ -367,14 +374,51 @@ export default function DashboardPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
       setModal({ kind: "closed" });
-      setToast({ kind: "ok", message: `Approved follow-up for ${invoice.customer.name}` });
+      const emailNote = json.emailSent ? " — email sent!" : json.emailDemo ? " (demo mode)" : "";
+      setToast({ kind: "ok", message: `Approved follow-up for ${invoice.customer.name}${emailNote}` });
       await refreshAll();
+
+      // Simulation mode: auto-generate customer reply after delay
+      if (simMode) {
+        setSimStatus("Customer is composing a reply...");
+        await new Promise((r) => setTimeout(r, 4000));
+        try {
+          setSimStatus("Agent is parsing the reply...");
+          const simRes = await fetch(`/api/agent/simulate-reply${demoQuery}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ invoiceId: invoice.id }),
+          });
+          const simJson = await simRes.json();
+          if (!simRes.ok) throw new Error(simJson?.error || "Simulation failed");
+
+          // Auto-submit the simulated reply through the reply API
+          const replyRes = await fetch(`/api/agent/reply${demoQuery}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ invoiceId: invoice.id, replyText: simJson.replyText }),
+          });
+          const replyJson = await replyRes.json();
+          if (!replyRes.ok) throw new Error(replyJson?.error || "Reply parsing failed");
+
+          setSimStatus(null);
+          const status = replyJson.parsed?.status || "unknown";
+          setToast({
+            kind: "ok",
+            message: `${invoice.customer.name} replied → ${status}${replyJson.parsed?.promiseDate ? ` (promise: ${formatDate(replyJson.parsed.promiseDate)})` : ""}`,
+          });
+          await refreshAll();
+        } catch (e: any) {
+          setSimStatus(null);
+          setToast({ kind: "error", message: `Simulation failed: ${e.message}` });
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setModal({ kind: "ready", invoice, result, editing: false, draftText });
       setToast({ kind: "error", message: `Approve failed: ${msg}` });
     }
-  }, [modal, refreshAll, demoQuery]);
+  }, [modal, refreshAll, demoQuery, simMode]);
 
   // ─── Record Reply ─────────────────────────────────────
 
@@ -552,6 +596,73 @@ export default function DashboardPage() {
             }}>Connect</a>
           )}
         </div>
+
+        {/* Simulation Mode Toggle + Add Invoice */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 24,
+          gap: 12,
+          flexWrap: "wrap",
+        }}>
+          <button
+            type="button"
+            onClick={() => setSimMode(!simMode)}
+            style={{
+              background: simMode ? "var(--amber)" + "22" : "var(--surface)",
+              border: `1px solid ${simMode ? "var(--amber)" : "var(--border)"}`,
+              color: simMode ? "var(--amber)" : "var(--text-dim)",
+              padding: "8px 16px",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {simMode ? "● Simulation ON" : "○ Simulation OFF"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAddInvoice(true)}
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              color: "var(--text)",
+              padding: "8px 16px",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            + Add Invoice
+          </button>
+        </div>
+
+        {/* Simulation status banner */}
+        {simStatus && (
+          <div style={{
+            background: "var(--amber)" + "18",
+            border: "1px solid var(--amber)",
+            borderRadius: 8,
+            padding: "10px 16px",
+            marginBottom: 16,
+            fontSize: 13,
+            color: "var(--amber)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}>
+            <Spinner />
+            {simStatus}
+          </div>
+        )}
 
         {/* Cashflow Board */}
         <div style={{
@@ -868,7 +979,7 @@ export default function DashboardPage() {
                   ) : (
                     <SecondaryButton label="Edit" onClick={() => setModal({ ...modal, editing: true })} />
                   )}
-                  <PrimaryButton label={modal.kind === "approving" ? "Approving..." : "Approve"} disabled={modal.kind === "approving" || !modal.draftText.trim()} onClick={approveDraft} />
+                  <PrimaryButton label={modal.kind === "approving" ? "Approving & sending..." : "Approve & Send"} disabled={modal.kind === "approving" || !modal.draftText.trim()} onClick={approveDraft} />
                 </div>
               </div>
             </ModalBody>
@@ -1095,6 +1206,16 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ─── Add Invoice Modal ────────────────────────── */}
+      {showAddInvoice && (
+        <AddInvoiceModal
+          demoQuery={demoQuery}
+          onClose={() => setShowAddInvoice(false)}
+          onCreated={() => { setShowAddInvoice(false); refreshAll(); }}
+          setToast={setToast}
+        />
+      )}
+
       {/* ─── Toast ──────────────────────────────────── */}
       {toast && (
         <div style={{
@@ -1240,6 +1361,117 @@ function SecondaryButton({ label, onClick, disabled }: { label: string; onClick:
       background: "transparent", color: "var(--text)", border: "1px solid var(--border)", padding: "8px 16px", borderRadius: 8,
       fontSize: 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1, fontFamily: "inherit",
     }}>{label}</button>
+  );
+}
+
+function AddInvoiceModal({
+  demoQuery,
+  onClose,
+  onCreated,
+  setToast,
+}: {
+  demoQuery: string;
+  onClose: () => void;
+  onCreated: () => void;
+  setToast: (t: { kind: "ok" | "error"; message: string } | null) => void;
+}) {
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerNotes, setCustomerNotes] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!customerName.trim() || !customerEmail.trim() || !invoiceNumber.trim() || !amount) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/invoices/create${demoQuery}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: customerName.trim(),
+          customerEmail: customerEmail.trim(),
+          customerNotes: customerNotes.trim() || undefined,
+          invoiceNumber: invoiceNumber.trim(),
+          amount: parseFloat(amount),
+          description: description.trim() || undefined,
+          dueDate,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Create failed");
+      setToast({ kind: "ok", message: `Invoice ${json.invoiceNumber} created for ${json.customerName}` });
+      onCreated();
+    } catch (e: any) {
+      setToast({ kind: "error", message: e.message || "Create failed" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <ModalBody title="Add Invoice" onClose={onClose}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Input label="Customer name" value={customerName} onChange={setCustomerName} placeholder="John Martinez" />
+            <Input label="Customer email" value={customerEmail} onChange={setCustomerEmail} placeholder="john@example.com" />
+          </div>
+          <Input label="Customer notes (optional)" value={customerNotes} onChange={setCustomerNotes} placeholder="Regular client. Pays slow but always comes through." />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Input label="Invoice number" value={invoiceNumber} onChange={setInvoiceNumber} placeholder="INV-1001" />
+            <Input label="Amount ($)" value={amount} onChange={setAmount} placeholder="3200" type="number" />
+          </div>
+          <Input label="Description" value={description} onChange={setDescription} placeholder="Roof repair - 120 sqm tile replacement" />
+          <Input label="Due date" value={dueDate} onChange={setDueDate} type="date" />
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+            <SecondaryButton label="Cancel" disabled={submitting} onClick={onClose} />
+            <PrimaryButton
+              label={submitting ? "Creating..." : "Create Invoice"}
+              disabled={submitting || !customerName.trim() || !customerEmail.trim() || !invoiceNumber.trim() || !amount}
+              onClick={handleSubmit}
+            />
+          </div>
+        </div>
+      </ModalBody>
+    </ModalOverlay>
+  );
+}
+
+function Input({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontSize: 11, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)",
+          borderRadius: 8, padding: "8px 10px", fontSize: 13, fontFamily: "inherit",
+        }}
+      />
+    </label>
   );
 }
 
