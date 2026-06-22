@@ -163,6 +163,56 @@ Alex`,
     },
   });
 
+  // Invoice 5: ACME Corp - promised to pay, promise date in 2 days
+  const inv1046 = await prisma.invoice.create({
+    data: {
+      userId: user.id,
+      customerId: acme.id,
+      invoiceNumber: "INV-1046",
+      amount: 185000, // $1,850
+      description: "Emergency roof patch — Building A, 3rd floor leak repair",
+      dueDate: new Date("2026-06-15"),
+      createdAt: new Date("2026-06-01"),
+      status: "promised",
+      promiseDate: new Date("2026-06-24"),
+    },
+  });
+
+  // Communication: ACME promised to pay
+  await prisma.communication.create({
+    data: {
+      invoiceId: inv1046.id,
+      direction: "outbound",
+      content: `Hi Sarah,
+
+Following up on invoice INV-1046 ($1,850.00) for the emergency roof patch on Building A. The invoice is now 5 days overdue.
+
+Could you let me know when we can expect payment?
+
+Best,
+Alex
+Roofing Pro`,
+      sentAt: new Date("2026-06-18"),
+    },
+  });
+
+  await prisma.communication.create({
+    data: {
+      invoiceId: inv1046.id,
+      direction: "inbound",
+      content: `Hi Alex,
+
+Apologies for the delay — our accounts payable cycle runs on Fridays. I've approved the invoice and it's queued for this Friday's run (June 24). You should see payment by end of day.
+
+Sarah
+ACME Corp Facilities`,
+      createdAt: new Date("2026-06-19"),
+      parsedStatus: "promised",
+      parsedPromiseDate: new Date("2026-06-24"),
+      parsedSummary: "Customer approved invoice, payment queued for Friday June 24.",
+    },
+  });
+
   console.log("Seed complete!");
   console.log(`  User: ${user.email}`);
   console.log(`  Customers: ${[john.name, acme.name, sarah.name].join(", ")}`);
@@ -171,7 +221,8 @@ Alex`,
   console.log(`    ${inv1043.invoiceNumber} - ${acme.name} - $${(inv1043.amount/100).toFixed(2)} - ${inv1043.status}`);
   console.log(`    ${inv1044.invoiceNumber} - ${sarah.name} - $${(inv1044.amount/100).toFixed(2)} - ${inv1044.status}`);
   console.log(`    ${inv1045.invoiceNumber} - ${john.name} - $${(inv1045.amount/100).toFixed(2)} - ${inv1045.status}`);
-  console.log(`  Communications: ${4} entries`);
+  console.log(`    ${inv1046.invoiceNumber} - ${acme.name} - $${(inv1046.amount/100).toFixed(2)} - ${inv1046.status}`);
+  console.log(`  Communications: ${6} entries`);
 }
 
 main()

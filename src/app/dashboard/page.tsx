@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/header";
 
+// ─── Types ──────────────────────────────────────────────
+
 interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -46,12 +48,80 @@ interface DraftResult {
   suggestedTone: string;
 }
 
+interface PromiseItem {
+  invoiceId: string;
+  invoiceNumber: string;
+  amount: number;
+  currency: string;
+  customerName: string;
+  customerEmail: string;
+  promiseDate: string;
+  daysUntil: number;
+  isBroken: boolean;
+  urgency: "broken" | "critical" | "soon" | "ok";
+  lastMessage: string | null;
+}
+
+interface ThreadMessage {
+  id: string;
+  direction: string;
+  channel: string;
+  content: string;
+  agentDraft: boolean;
+  approved: boolean;
+  sentAt: string | null;
+  createdAt: string;
+  parsedStatus: string | null;
+  parsedPromiseDate: string | null;
+  parsedSummary: string | null;
+}
+
+interface ThreadData {
+  invoice: {
+    id: string;
+    invoiceNumber: string;
+    amount: number;
+    currency: string;
+    description: string | null;
+    dueDate: string;
+    status: string;
+    promiseDate: string | null;
+    paidAt: string | null;
+    paymentLinkId: string | null;
+  };
+  customer: { name: string; email: string; phone: string | null; notes: string | null };
+  communications: ThreadMessage[];
+}
+
+interface ReplyResult {
+  ok: boolean;
+  communicationId: string;
+  invoiceNumber: string;
+  parsed: {
+    status: string;
+    promiseDate: string | null;
+    summary: string;
+    recommendedTone: string;
+    nextAction: string;
+  };
+  invoiceUpdated: boolean;
+}
+
 type ModalState =
   | { kind: "closed" }
   | { kind: "loading"; invoice: Invoice }
   | { kind: "error"; invoice: Invoice; message: string }
   | { kind: "ready"; invoice: Invoice; result: DraftResult; editing: boolean; draftText: string }
   | { kind: "approving"; invoice: Invoice; result: DraftResult; editing: boolean; draftText: string };
+
+type ReplyModalState =
+  | { kind: "closed" }
+  | { kind: "input"; invoice: Invoice }
+  | { kind: "parsing"; invoice: Invoice }
+  | { kind: "result"; invoice: Invoice; result: ReplyResult }
+  | { kind: "error"; invoice: Invoice; message: string };
+
+// ─── Helpers ────────────────────────────────────────────
 
 function formatCents(cents: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -63,9 +133,15 @@ function formatCents(cents: number): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -94,14 +170,62 @@ function toneColor(tone: string): string {
   }
 }
 
+function urgencyColor(u: string): string {
+  switch (u) {
+    case "broken": return "var(--danger)";
+    case "critical": return "var(--amber)";
+    case "soon": return "var(--accent)";
+    default: return "var(--text-dim)";
+  }
+}
+
+function parsedStatusColor(s: string): string {
+  switch (s) {
+    case "promised": return "var(--amber)";
+    case "disputed": return "var(--danger)";
+    case "question": return "var(--accent)";
+    case "ignored": return "var(--text-dim)";
+    default: return "var(--text-dim)";
+  }
+}
+
+function nextActionLabel(action: string): string {
+  switch (action) {
+    case "check_payment": return "Check payment";
+    case "escalate": return "Escalate tone";
+    case "wait": return "Wait for customer";
+    case "human_needed": return "Needs human";
+    default: return action;
+  }
+}
+
+function defaultScheduleDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
+// ─── Main Component ─────────────────────────────────────
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
+  const [replyModal, setReplyModal] = useState<ReplyModalState>({ kind: "closed" });
+  const [replyText, setReplyText] = useState("");
   const [toast, setToast] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
   const [scheduleFor, setScheduleFor] = useState<Invoice | null>(null);
   const [scheduleDate, setScheduleDate] = useState<string>(defaultScheduleDate());
   const [scheduling, setScheduling] = useState(false);
+
+  // Thread drawer
+  const [threadFor, setThreadFor] = useState<Invoice | null>(null);
+  const [threadData, setThreadData] = useState<ThreadData | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+
+  // Promise tracker
+  const [promises, setPromises] = useState<PromiseItem[]>([]);
+  const [promisesLoading, setPromisesLoading] = useState(false);
 
   const isDemo = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -118,9 +242,19 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [demoQuery]);
 
+  const refreshPromises = useCallback(() => {
+    setPromisesLoading(true);
+    return fetch(`/api/agent/promises${demoQuery}`)
+      .then((r) => r.json())
+      .then((d) => setPromises(d.promises || []))
+      .catch(console.error)
+      .finally(() => setPromisesLoading(false));
+  }, [demoQuery]);
+
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    refreshPromises();
+  }, [refresh, refreshPromises]);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -136,14 +270,18 @@ export default function DashboardPage() {
       (i) => i.status === "promised" && i.promiseDate && new Date(i.promiseDate) < new Date()
     );
     const newQuotes = invs.filter((i) => i.status === "pending");
-    const needsAttention = overdue.length + promisedExpired.length + newQuotes.length;
+    const disputed = invs.filter((i) => i.status === "disputed");
+    const needsAttention = overdue.length + promisedExpired.length + newQuotes.length + disputed.length;
     return {
       total: needsAttention,
       overdue: overdue.length,
       promisedExpired: promisedExpired.length,
       newQuotes: newQuotes.length,
+      disputed: disputed.length,
     };
   }, [data]);
+
+  // ─── Draft Follow-up ──────────────────────────────────
 
   const openDraft = useCallback(async (invoice: Invoice) => {
     setModal({ kind: "loading", invoice });
@@ -154,9 +292,7 @@ export default function DashboardPage() {
         body: JSON.stringify({ invoiceId: invoice.id }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json?.error || `Request failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
       setModal({
         kind: "ready",
         invoice,
@@ -179,23 +315,45 @@ export default function DashboardPage() {
       const res = await fetch(`/api/agent/approve${demoQuery}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          invoiceId: invoice.id,
-          draftText,
-          tone: result.suggestedTone,
-        }),
+        body: JSON.stringify({ invoiceId: invoice.id, draftText, tone: result.suggestedTone }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
       setModal({ kind: "closed" });
       setToast({ kind: "ok", message: `Approved follow-up for ${invoice.customer.name}` });
-      await refresh();
+      await Promise.all([refresh(), refreshPromises()]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setModal({ kind: "ready", invoice, result, editing: false, draftText });
       setToast({ kind: "error", message: `Approve failed: ${msg}` });
     }
-  }, [modal, refresh, demoQuery]);
+  }, [modal, refresh, refreshPromises, demoQuery]);
+
+  // ─── Record Reply ─────────────────────────────────────
+
+  const submitReply = useCallback(async () => {
+    if (replyModal.kind !== "input") return;
+    const invoice = replyModal.invoice;
+    if (!replyText.trim()) return;
+    setReplyModal({ kind: "parsing", invoice });
+    try {
+      const res = await fetch(`/api/agent/reply${demoQuery}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: invoice.id, replyText: replyText.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
+      setReplyModal({ kind: "result", invoice, result: json as ReplyResult });
+      setReplyText("");
+      await Promise.all([refresh(), refreshPromises()]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setReplyModal({ kind: "error", invoice, message: msg });
+    }
+  }, [replyModal, replyText, demoQuery, refresh, refreshPromises]);
+
+  // ─── Schedule ─────────────────────────────────────────
 
   const runSchedule = useCallback(async () => {
     if (!scheduleFor) return;
@@ -208,10 +366,7 @@ export default function DashboardPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
-      setToast({
-        kind: "ok",
-        message: `Scheduled re-check for ${scheduleFor.customer.name} on ${scheduleDate}`,
-      });
+      setToast({ kind: "ok", message: `Scheduled re-check for ${scheduleFor.customer.name} on ${scheduleDate}` });
       setScheduleFor(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -220,6 +375,26 @@ export default function DashboardPage() {
       setScheduling(false);
     }
   }, [scheduleFor, scheduleDate, demoQuery]);
+
+  // ─── Thread Drawer ────────────────────────────────────
+
+  const openThread = useCallback(async (invoice: Invoice) => {
+    setThreadFor(invoice);
+    setThreadData(null);
+    setThreadLoading(true);
+    try {
+      const res = await fetch(`/api/agent/thread${demoQuery}&invoiceId=${invoice.id}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
+      setThreadData(json as ThreadData);
+    } catch (e) {
+      console.error("Thread load failed:", e);
+    } finally {
+      setThreadLoading(false);
+    }
+  }, [demoQuery]);
+
+  // ─── Render ───────────────────────────────────────────
 
   if (loading) {
     return (
@@ -235,7 +410,7 @@ export default function DashboardPage() {
   const cf = data?.cashflow;
   const actionInvoices =
     data?.invoices?.filter(
-      (i) => i.status === "overdue" || i.status === "promised"
+      (i) => i.status === "overdue" || i.status === "promised" || i.status === "disputed"
     ) || [];
 
   return (
@@ -314,6 +489,63 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {/* Promise Tracker */}
+        {promises.length > 0 && (
+          <div style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            padding: "16px 24px",
+            marginBottom: 24,
+          }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Promise Tracker
+            </h3>
+            {promises.map((p) => (
+              <div key={p.invoiceId} style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 0",
+                borderBottom: "1px solid var(--border)",
+                fontSize: 13,
+                gap: 12,
+                flexWrap: "wrap",
+              }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <strong>{p.customerName}</strong>
+                  {" — "}
+                  {p.invoiceNumber} ({formatCents(p.amount)})
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                  <span style={{
+                    background: urgencyColor(p.urgency) + "22",
+                    color: urgencyColor(p.urgency),
+                    padding: "2px 10px",
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}>
+                    {p.isBroken
+                      ? `${Math.abs(p.daysUntil)} days overdue`
+                      : p.daysUntil === 0
+                        ? "Due today"
+                        : `${p.daysUntil} days left`}
+                  </span>
+                  <ActionButton
+                    label="View Thread"
+                    color="var(--text-dim)"
+                    onClick={() => {
+                      const inv = data?.invoices?.find((i) => i.id === p.invoiceId);
+                      if (inv) openThread(inv);
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Agent Actions */}
         {actionInvoices.length > 0 && (
           <div style={{
@@ -346,6 +578,9 @@ export default function DashboardPage() {
                 {summary.newQuotes > 0 && (
                   <SummaryChip color="var(--accent)" label={`${summary.newQuotes} new-quotes`} />
                 )}
+                {summary.disputed > 0 && (
+                  <SummaryChip color="var(--danger)" label={`${summary.disputed} disputed`} />
+                )}
               </div>
             </div>
 
@@ -370,25 +605,26 @@ export default function DashboardPage() {
                   <span style={{ color: "var(--text-dim)", marginLeft: 8 }}>
                     {inv.status === "overdue"
                       ? `Overdue ${daysOverdue(inv.dueDate)} days`
-                      : inv.promiseDate
-                        ? `Promised ${formatDate(inv.promiseDate)}`
-                        : "Promised"}
+                      : inv.status === "disputed"
+                        ? "⚠ Disputed"
+                        : inv.promiseDate
+                          ? `Promised ${formatDate(inv.promiseDate)}`
+                          : "Promised"}
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+                  <ActionButton label="Thread" color="var(--text-dim)" onClick={() => openThread(inv)} />
+                  <ActionButton label="Draft Follow-up" color="var(--accent)" onClick={() => openDraft(inv)} />
                   <ActionButton
-                    label="Draft Follow-up"
-                    color="var(--accent)"
-                    onClick={() => openDraft(inv)}
+                    label="Record Reply"
+                    color="var(--green)"
+                    onClick={() => { setReplyModal({ kind: "input", invoice: inv }); setReplyText(""); }}
                   />
                   {inv.status === "promised" && (
                     <ActionButton
                       label="Schedule Check"
                       color="var(--amber)"
-                      onClick={() => {
-                        setScheduleFor(inv);
-                        setScheduleDate(defaultScheduleDate());
-                      }}
+                      onClick={() => { setScheduleFor(inv); setScheduleDate(defaultScheduleDate()); }}
                     />
                   )}
                 </div>
@@ -429,10 +665,15 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {data.invoices.map((inv) => (
-                    <tr key={inv.id} style={{
-                      borderBottom: "1px solid var(--border)",
-                      fontSize: 13,
-                    }}>
+                    <tr
+                      key={inv.id}
+                      onClick={() => openThread(inv)}
+                      style={{
+                        borderBottom: "1px solid var(--border)",
+                        fontSize: 13,
+                        cursor: "pointer",
+                      }}
+                    >
                       <td style={{ padding: "10px 16px", fontWeight: 600 }}>
                         {inv.invoiceNumber}
                       </td>
@@ -495,7 +736,7 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* Draft Modal */}
+      {/* ─── Draft Modal ─────────────────────────────── */}
       {modal.kind !== "closed" && (
         <ModalOverlay onClose={() => setModal({ kind: "closed" })}>
           {modal.kind === "loading" && (
@@ -538,7 +779,6 @@ export default function DashboardPage() {
               onClose={() => setModal({ kind: "closed" })}
             >
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {/* Invoice details */}
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
@@ -553,7 +793,6 @@ export default function DashboardPage() {
                   <Detail label="Customer" value={modal.result.customer.email} />
                 </div>
 
-                {/* Tone badge */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
                   <span style={{ color: "var(--text-dim)" }}>Suggested tone:</span>
                   <span style={{
@@ -568,19 +807,14 @@ export default function DashboardPage() {
                     {modal.result.suggestedTone}
                   </span>
                   {modal.editing && (
-                    <span style={{ color: "var(--text-dim)", marginLeft: "auto" }}>
-                      Editing
-                    </span>
+                    <span style={{ color: "var(--text-dim)", marginLeft: "auto" }}>Editing</span>
                   )}
                 </div>
 
-                {/* Draft text / editor */}
                 {modal.editing ? (
                   <textarea
                     value={modal.draftText}
-                    onChange={(e) =>
-                      setModal({ ...modal, draftText: e.target.value })
-                    }
+                    onChange={(e) => setModal({ ...modal, draftText: e.target.value })}
                     style={{
                       width: "100%",
                       minHeight: 220,
@@ -614,31 +848,12 @@ export default function DashboardPage() {
                   </pre>
                 )}
 
-                {/* Actions */}
-                <div style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}>
-                  <SecondaryButton
-                    label="Cancel"
-                    onClick={() => setModal({ kind: "closed" })}
-                  />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                  <SecondaryButton label="Cancel" onClick={() => setModal({ kind: "closed" })} />
                   {modal.editing ? (
-                    <SecondaryButton
-                      label="Preview"
-                      onClick={() =>
-                        setModal({ ...modal, editing: false })
-                      }
-                    />
+                    <SecondaryButton label="Preview" onClick={() => setModal({ ...modal, editing: false })} />
                   ) : (
-                    <SecondaryButton
-                      label="Edit"
-                      onClick={() =>
-                        setModal({ ...modal, editing: true })
-                      }
-                    />
+                    <SecondaryButton label="Edit" onClick={() => setModal({ ...modal, editing: true })} />
                   )}
                   <PrimaryButton
                     label={modal.kind === "approving" ? "Approving..." : "Approve"}
@@ -652,7 +867,168 @@ export default function DashboardPage() {
         </ModalOverlay>
       )}
 
-      {/* Schedule Check Modal */}
+      {/* ─── Reply Modal ─────────────────────────────── */}
+      {replyModal.kind !== "closed" && (
+        <ModalOverlay onClose={() => { setReplyModal({ kind: "closed" }); setReplyText(""); }}>
+          {replyModal.kind === "input" && (
+            <ModalBody
+              title={`Record customer reply — ${replyModal.invoice.customer.name}`}
+              onClose={() => { setReplyModal({ kind: "closed" }); setReplyText(""); }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                  Paste the customer's reply email below. The agent will read it, classify the intent
+                  (promise / dispute / question / ignored), extract any promise date, and update the invoice status.
+                </div>
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="e.g. Hey Alex, sorry for the delay. I'll send payment by Friday for sure."
+                  style={{
+                    width: "100%",
+                    minHeight: 140,
+                    background: "var(--bg)",
+                    color: "var(--text)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    padding: 12,
+                    fontSize: 13,
+                    fontFamily: "inherit",
+                    lineHeight: 1.5,
+                    resize: "vertical",
+                  }}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  <SecondaryButton label="Cancel" onClick={() => { setReplyModal({ kind: "closed" }); setReplyText(""); }} />
+                  <PrimaryButton label="Parse Reply" disabled={!replyText.trim()} onClick={submitReply} />
+                </div>
+              </div>
+            </ModalBody>
+          )}
+
+          {replyModal.kind === "parsing" && (
+            <ModalBody title={`Parsing reply — ${replyModal.invoice.customer.name}`}>
+              <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-dim)" }}>
+                <Spinner />
+                <div style={{ marginTop: 12, fontSize: 13 }}>
+                  Agent is reading the reply and classifying intent...
+                </div>
+              </div>
+            </ModalBody>
+          )}
+
+          {replyModal.kind === "result" && replyModal.result && (
+            <ModalBody
+              title={`Reply parsed — ${replyModal.invoice.customer.name}`}
+              onClose={() => { setReplyModal({ kind: "closed" }); setReplyText(""); }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Parsed classification */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: 10,
+                  fontSize: 12,
+                }}>
+                  <Detail label="Classification" value={replyModal.result.parsed.status} />
+                  <Detail label="Promise date" value={replyModal.result.parsed.promiseDate ? formatDate(replyModal.result.parsed.promiseDate) : "—"} />
+                  <Detail label="Next action" value={nextActionLabel(replyModal.result.parsed.nextAction)} />
+                  <Detail label="Suggested tone" value={replyModal.result.parsed.recommendedTone} />
+                </div>
+
+                {/* Summary */}
+                <div style={{
+                  background: "var(--bg)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: 12,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}>
+                  <div style={{ color: "var(--text-dim)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+                    Agent Summary
+                  </div>
+                  {replyModal.result.parsed.summary}
+                </div>
+
+                {/* Status badge */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span style={{ color: "var(--text-dim)" }}>Invoice updated:</span>
+                  <span style={{
+                    background: replyModal.result.invoiceUpdated ? "var(--green)" + "22" : "var(--text-dim)" + "22",
+                    color: replyModal.result.invoiceUpdated ? "var(--green)" : "var(--text-dim)",
+                    padding: "2px 10px",
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}>
+                    {replyModal.result.invoiceUpdated ? "Yes — status changed" : "No status change"}
+                  </span>
+                </div>
+
+                {/* Action buttons */}
+                {(replyModal.result.parsed.status === "disputed" || replyModal.result.parsed.status === "question") && (
+                  <div style={{
+                    background: "var(--danger)" + "18",
+                    border: `1px solid var(--danger)`,
+                    borderRadius: 8,
+                    padding: "12px 14px",
+                    fontSize: 13,
+                    color: "var(--danger)",
+                  }}>
+                    ⚠ This needs human attention. The agent will not auto-draft a reply for {replyModal.result.parsed.status} messages.
+                  </div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  {replyModal.result.parsed.status === "promised" && (
+                    <SecondaryButton
+                      label="Schedule Check"
+                      onClick={() => {
+                        const inv = replyModal.invoice;
+                        setReplyModal({ kind: "closed" });
+                        setReplyText("");
+                        setScheduleFor(inv);
+                        if (replyModal.result.parsed.promiseDate) {
+                          const d = new Date(replyModal.result.parsed.promiseDate);
+                          d.setDate(d.getDate() + 1);
+                          setScheduleDate(d.toISOString().slice(0, 10));
+                        }
+                      }}
+                    />
+                  )}
+                  <PrimaryButton label="Done" onClick={() => { setReplyModal({ kind: "closed" }); setReplyText(""); }} />
+                </div>
+              </div>
+            </ModalBody>
+          )}
+
+          {replyModal.kind === "error" && (
+            <ModalBody
+              title={`Parse failed — ${replyModal.invoice.customer.name}`}
+              onClose={() => { setReplyModal({ kind: "closed" }); setReplyText(""); }}
+            >
+              <div style={{
+                background: "var(--danger)" + "18",
+                border: `1px solid var(--danger)`,
+                borderRadius: 8,
+                padding: "12px 14px",
+                fontSize: 13,
+                color: "var(--danger)",
+                whiteSpace: "pre-wrap",
+                marginBottom: 16,
+              }}>
+                {replyModal.message}
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <SecondaryButton label="Close" onClick={() => { setReplyModal({ kind: "closed" }); setReplyText(""); }} />
+              </div>
+            </ModalBody>
+          )}
+        </ModalOverlay>
+      )}
+
+      {/* ─── Schedule Check Modal ──────────────────────── */}
       {scheduleFor && (
         <ModalOverlay onClose={() => !scheduling && setScheduleFor(null)}>
           <ModalBody
@@ -683,23 +1059,244 @@ export default function DashboardPage() {
                 />
               </label>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <SecondaryButton
-                  label="Cancel"
-                  disabled={scheduling}
-                  onClick={() => setScheduleFor(null)}
-                />
-                <PrimaryButton
-                  label={scheduling ? "Scheduling..." : "Schedule"}
-                  disabled={scheduling || !scheduleDate}
-                  onClick={runSchedule}
-                />
+                <SecondaryButton label="Cancel" disabled={scheduling} onClick={() => setScheduleFor(null)} />
+                <PrimaryButton label={scheduling ? "Scheduling..." : "Schedule"} disabled={scheduling || !scheduleDate} onClick={runSchedule} />
               </div>
             </div>
           </ModalBody>
         </ModalOverlay>
       )}
 
-      {/* Toast */}
+      {/* ─── Thread Drawer ─────────────────────────────── */}
+      {threadFor && (
+        <div
+          onClick={() => !threadLoading && setThreadFor(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "flex-end",
+            zIndex: 998,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--surface)",
+              borderLeft: "1px solid var(--border)",
+              width: "100%",
+              maxWidth: 520,
+              height: "100%",
+              overflow: "auto",
+              padding: 24,
+            }}
+          >
+            {/* Drawer header */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 20,
+            }}>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
+                  {threadFor.invoiceNumber}
+                </h3>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>
+                  {threadFor.customer.name} · {formatCents(threadFor.amount)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setThreadFor(null)}
+                aria-label="Close"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-dim)",
+                  fontSize: 20,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  padding: 0,
+                  fontFamily: "inherit",
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {threadLoading && (
+              <div style={{ padding: 40, textAlign: "center", color: "var(--text-dim)" }}>
+                <Spinner />
+                <div style={{ marginTop: 12, fontSize: 13 }}>Loading thread...</div>
+              </div>
+            )}
+
+            {threadData && !threadLoading && (
+              <>
+                {/* Invoice details */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
+                  gap: 8,
+                  fontSize: 12,
+                  marginBottom: 20,
+                  paddingBottom: 20,
+                  borderBottom: "1px solid var(--border)",
+                }}>
+                  <Detail label="Status" value={threadData.invoice.status} />
+                  <Detail label="Due" value={formatDate(threadData.invoice.dueDate)} />
+                  <Detail label="Promise" value={threadData.invoice.promiseDate ? formatDate(threadData.invoice.promiseDate) : "—"} />
+                  <Detail label="Paid" value={threadData.invoice.paidAt ? formatDate(threadData.invoice.paidAt) : "—"} />
+                </div>
+
+                {/* Customer notes */}
+                {threadData.customer.notes && (
+                  <div style={{
+                    background: "var(--bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    padding: 12,
+                    fontSize: 12,
+                    marginBottom: 20,
+                    lineHeight: 1.5,
+                  }}>
+                    <div style={{ color: "var(--text-dim)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+                      Customer Notes
+                    </div>
+                    {threadData.customer.notes}
+                  </div>
+                )}
+
+                {/* Conversation thread */}
+                <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Conversation ({threadData.communications.length})
+                </h4>
+
+                {threadData.communications.length === 0 ? (
+                  <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 20 }}>
+                    No messages yet.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {threadData.communications.map((msg) => (
+                      <div
+                        key={msg.id}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: msg.direction === "inbound" ? "flex-start" : "flex-end",
+                        }}
+                      >
+                        <div style={{
+                          maxWidth: "85%",
+                          background: msg.direction === "inbound" ? "var(--bg)" : "var(--accent)" + "15",
+                          border: `1px solid ${msg.direction === "inbound" ? "var(--border)" : "var(--accent)" + "33"}`,
+                          borderRadius: 12,
+                          padding: "10px 14px",
+                          fontSize: 13,
+                          lineHeight: 1.5,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}>
+                          {/* Meta row */}
+                          <div style={{
+                            display: "flex",
+                            gap: 6,
+                            alignItems: "center",
+                            marginBottom: 6,
+                            fontSize: 11,
+                            color: "var(--text-dim)",
+                          }}>
+                            <span style={{ fontWeight: 700 }}>
+                              {msg.direction === "inbound" ? "Customer" : msg.agentDraft ? "Agent draft" : "Sent"}
+                            </span>
+                            <span>· {formatDateTime(msg.sentAt || msg.createdAt)}</span>
+                            {msg.agentDraft && msg.approved && (
+                              <span style={{ color: "var(--green)" }}>✓ approved</span>
+                            )}
+                          </div>
+
+                          {msg.content}
+
+                          {/* Parsed badges for inbound */}
+                          {msg.direction === "inbound" && msg.parsedStatus && (
+                            <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <span style={{
+                                background: parsedStatusColor(msg.parsedStatus) + "22",
+                                color: parsedStatusColor(msg.parsedStatus),
+                                padding: "1px 8px",
+                                borderRadius: 10,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                textTransform: "capitalize",
+                              }}>
+                                {msg.parsedStatus}
+                              </span>
+                              {msg.parsedPromiseDate && (
+                                <span style={{
+                                  background: "var(--amber)" + "22",
+                                  color: "var(--amber)",
+                                  padding: "1px 8px",
+                                  borderRadius: 10,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                }}>
+                                  Promise: {formatDate(msg.parsedPromiseDate)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Summary below inbound */}
+                        {msg.direction === "inbound" && msg.parsedSummary && (
+                          <div style={{
+                            fontSize: 11,
+                            color: "var(--text-dim)",
+                            marginTop: 4,
+                            maxWidth: "85%",
+                            fontStyle: "italic",
+                          }}>
+                            {msg.parsedSummary}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Quick actions */}
+                <div style={{
+                  marginTop: 24,
+                  paddingTop: 20,
+                  borderTop: "1px solid var(--border)",
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}>
+                  <ActionButton label="Draft Follow-up" color="var(--accent)" onClick={() => { openDraft(threadFor); setThreadFor(null); }} />
+                  <ActionButton
+                    label="Record Reply"
+                    color="var(--green)"
+                    onClick={() => { setReplyModal({ kind: "input", invoice: threadFor }); setReplyText(""); setThreadFor(null); }}
+                  />
+                  {threadFor.status === "promised" && (
+                    <ActionButton
+                      label="Schedule Check"
+                      color="var(--amber)"
+                      onClick={() => { setScheduleFor(threadFor); setScheduleDate(defaultScheduleDate()); setThreadFor(null); }}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Toast ──────────────────────────────────── */}
       {toast && (
         <div style={{
           position: "fixed",
@@ -724,11 +1321,7 @@ export default function DashboardPage() {
   );
 }
 
-function defaultScheduleDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 7);
-  return d.toISOString().slice(0, 10);
-}
+// ─── UI Components ──────────────────────────────────────
 
 function SummaryChip({ color, label }: { color: string; label: string }) {
   return (

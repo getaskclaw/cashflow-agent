@@ -152,20 +152,8 @@ export default function HomePage() {
             </div>
           ) : (
             <div style={{ display: "inline-flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-              <button
-                onClick={() => {
-                  const email = prompt("Enter your email to sign in:");
-                  if (email) {
-                    fetch("/api/auth/signin/email", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ email, csrfToken: "" }),
-                    });
-                    alert(
-                      "Check your email for a magic link! (If email isn't configured, use the demo mode.)"
-                    );
-                  }
-                }}
+              <a
+                href="/dashboard?demo=1"
                 style={{
                   display: "inline-block",
                   background: "var(--accent)",
@@ -174,14 +162,13 @@ export default function HomePage() {
                   borderRadius: 10,
                   fontSize: 16,
                   fontWeight: 700,
-                  border: "none",
-                  cursor: "pointer",
+                  textDecoration: "none",
                 }}
               >
-                Get Started Free
-              </button>
+                View Live Demo →
+              </a>
               <a
-                href="/dashboard?demo=1"
+                href="/api/auth/signin"
                 style={{
                   display: "inline-block",
                   background: "transparent",
@@ -194,7 +181,7 @@ export default function HomePage() {
                   textDecoration: "none",
                 }}
               >
-                View Live Demo →
+                Sign in
               </a>
             </div>
           )}
