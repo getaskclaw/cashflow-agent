@@ -99,7 +99,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Webhook error:", error);
     return NextResponse.json(
-      { error: error.message || "Webhook handler failed" },
+      { error: "Webhook handler failed" },
       { status: 500 }
     );
   }

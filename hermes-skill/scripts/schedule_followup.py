@@ -20,7 +20,10 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-DEFAULT_DB = "/root/2604/cashflow-agent/prisma/dev.db"
+DEFAULT_DB = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "prisma", "dev.db"
+)
 SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(SKILL_DIR, "..", ".scheduled_followups.jsonl")
 SCRIPT_DIR = SKILL_DIR

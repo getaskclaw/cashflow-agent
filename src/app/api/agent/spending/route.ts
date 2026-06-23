@@ -79,7 +79,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("Spending API error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to load spending" },
+      { error: "Failed to load spending" },
       { status: 500 }
     );
   }

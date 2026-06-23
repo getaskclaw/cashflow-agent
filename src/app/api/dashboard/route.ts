@@ -95,7 +95,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("Dashboard API error:", error);
     return NextResponse.json(
-      { error: error.message || "Dashboard data failed" },
+      { error: "Dashboard data failed" },
       { status: 500 }
     );
   }

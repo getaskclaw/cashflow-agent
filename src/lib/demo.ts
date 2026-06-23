@@ -4,9 +4,15 @@ export const DEMO_USER_EMAIL = "demo@cashflowagent.dev";
 
 /**
  * Returns true when the request carries a `?demo=1` query parameter.
- * Used to bypass auth for hackathon demo videos.
+ *
+ * SECURITY: Demo mode is disabled in production (NODE_ENV=production)
+ * to prevent authentication bypass on mutating endpoints.
  */
 export function isDemoRequest(req: Request): boolean {
+  // Block demo mode in production
+  if (process.env.NODE_ENV === "production" && process.env.ENABLE_DEMO_IN_PROD !== "true") {
+    return false;
+  }
   try {
     return new URL(req.url).searchParams.get("demo") === "1";
   } catch {

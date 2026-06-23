@@ -74,7 +74,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("Thread API error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to load thread" },
+      { error: "Failed to load thread" },
       { status: 500 }
     );
   }

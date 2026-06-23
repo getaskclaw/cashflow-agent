@@ -63,7 +63,7 @@ export async function POST() {
   } catch (error: any) {
     console.error("Sync error:", error);
     return NextResponse.json(
-      { error: error.message || "Sync failed" },
+      { error: "Sync failed" },
       { status: 500 }
     );
   }

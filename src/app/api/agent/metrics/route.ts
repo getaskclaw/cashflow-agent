@@ -78,7 +78,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("Metrics API error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to load metrics" },
+      { error: "Failed to load metrics" },
       { status: 500 }
     );
   }

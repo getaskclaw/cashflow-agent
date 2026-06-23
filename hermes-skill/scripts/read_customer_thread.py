@@ -15,7 +15,10 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 
-DEFAULT_DB = "/root/2604/cashflow-agent/prisma/dev.db"
+DEFAULT_DB = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "prisma", "dev.db"
+)
 
 
 def _db_path() -> str:

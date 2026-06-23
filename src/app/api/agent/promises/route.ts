@@ -69,7 +69,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("Promises API error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to load promises" },
+      { error: "Failed to load promises" },
       { status: 500 }
     );
   }

@@ -1,22 +1,40 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getStripeClient } from "@/lib/stripe";
+import { getStripeClient, verifyStripeState } from "@/lib/stripe";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const userId = url.searchParams.get("state");
+  const state = url.searchParams.get("state");
   const code = url.searchParams.get("code");
+  const error = url.searchParams.get("error");
 
-  if (!userId || !code) {
-    return NextResponse.redirect(
-      new URL("/connect-stripe?error=missing_params", req.url)
-    );
+  if (error) {
+    return NextResponse.redirect(new URL(`/connect-stripe?error=${error}`, req.url));
+  }
+
+  if (!state || !code) {
+    return NextResponse.redirect(new URL("/connect-stripe?error=missing_params", req.url));
+  }
+
+  // Verify the signed state nonce
+  const userId = verifyStripeState(state);
+  if (!userId) {
+    return NextResponse.redirect(new URL("/connect-stripe?error=invalid_state", req.url));
+  }
+
+  // In production, verify the current session matches the state userId
+  if (process.env.NODE_ENV === "production") {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || session.user.id !== userId) {
+      return NextResponse.redirect(new URL("/connect-stripe?error=session_mismatch", req.url));
+    }
   }
 
   try {
     const stripe = getStripeClient();
 
-    // Exchange authorization code for Stripe access token
     const oauthResponse = await stripe.oauth.token({
       grant_type: "authorization_code",
       code,
@@ -27,7 +45,6 @@ export async function GET(req: Request) {
       throw new Error("No stripe_user_id in OAuth response");
     }
 
-    // Store the connection
     await prisma.stripeConnection.upsert({
       where: { userId },
       update: {
@@ -49,15 +66,12 @@ export async function GET(req: Request) {
       },
     });
 
-    // Trigger initial sync
-    await syncTransactions(userId, connectedAccountId, oauthResponse.access_token ?? "");
+    await syncTransactions(userId, connectedAccountId);
 
     return NextResponse.redirect(new URL("/dashboard?connected=true", req.url));
-  } catch (error) {
-    console.error("Stripe OAuth error:", error);
-    return NextResponse.redirect(
-      new URL("/connect-stripe?error=oauth_failed", req.url)
-    );
+  } catch (error: any) {
+    console.error("Stripe OAuth error:", error?.message || error);
+    return NextResponse.redirect(new URL("/connect-stripe?error=oauth_failed", req.url));
   }
 }
 
@@ -65,8 +79,7 @@ export const dynamic = "force-dynamic";
 
 async function syncTransactions(
   userId: string,
-  stripeAccountId: string,
-  accessToken: string
+  stripeAccountId: string
 ) {
   try {
     const stripe = getStripeClient();

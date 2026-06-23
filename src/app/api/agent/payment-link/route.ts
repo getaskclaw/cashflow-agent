@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 const SCRIPTS_DIR =
   process.env.CASHFLOW_SCRIPTS_DIR ||
-  `${process.env.HOME}/.hermes/skills/business/cashflow-agent/scripts`;
+  `${process.cwd()}/hermes-skill/scripts`;
 
 const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
 
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: `Payment link failed: ${msg}` }, { status: 502 });
+    return NextResponse.json({ error: "Payment link failed:" }, { status: 502 });
   }
 }
 

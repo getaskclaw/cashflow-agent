@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 const SCRIPTS_DIR =
   process.env.CASHFLOW_SCRIPTS_DIR ||
-  `${process.env.HOME}/.hermes/skills/business/cashflow-agent/scripts`;
+  `${process.cwd()}/hermes-skill/scripts`;
 
 const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
 

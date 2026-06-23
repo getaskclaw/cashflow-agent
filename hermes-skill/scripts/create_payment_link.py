@@ -20,7 +20,10 @@ import sqlite3
 import sys
 from typing import Optional
 
-DEFAULT_DB = "/root/2604/cashflow-agent/prisma/dev.db"
+DEFAULT_DB = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "prisma", "dev.db"
+)
 KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".stripe_key")
 
 
@@ -28,7 +31,7 @@ def _db_path() -> str:
     return os.environ.get("CASHFLOW_DB") or DEFAULT_DB
 
 
-def _load_stripe_key(db_path: str) -> str:
+def _load_stripe_key(db_path: str, invoice_id: str) -> str:
     key = os.environ.get("STRIPE_SECRET_KEY")
     if key:
         return key
@@ -38,11 +41,17 @@ def _load_stripe_key(db_path: str) -> str:
             line = f.read().strip()
             if line:
                 return line
-    # Fall back to DB
+    # Fall back to DB — scoped to the invoice owner's Stripe connection
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
-            "SELECT accessToken FROM StripeConnection ORDER BY connectedAt DESC LIMIT 1"
+            """
+            SELECT sc.accessToken
+            FROM StripeConnection sc
+            JOIN Invoice i ON i.userId = sc.userId
+            WHERE i.id = ?
+            """,
+            (invoice_id,),
         ).fetchone()
         if row and row[0]:
             return row[0]
@@ -103,7 +112,7 @@ def create_payment_link(invoice_id: str) -> dict:
             "reused": True,
         }
 
-    key = _load_stripe_key(db_path)
+    key = _load_stripe_key(db_path, invoice_id)
     try:
         import stripe
     except ImportError as e:

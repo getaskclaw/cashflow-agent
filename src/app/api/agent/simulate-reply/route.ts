@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 const SCRIPTS_DIR =
   process.env.CASHFLOW_SCRIPTS_DIR ||
-  `${process.env.HOME}/.hermes/skills/business/cashflow-agent/scripts`;
+  `${process.cwd()}/hermes-skill/scripts`;
 
 const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
 
@@ -148,7 +148,7 @@ Rules:
   } catch (e: any) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
-      { error: `Simulation failed: ${msg}` },
+      { error: "Simulation failed:" },
       { status: 502 }
     );
   }
