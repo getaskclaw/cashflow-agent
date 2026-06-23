@@ -17,7 +17,7 @@ Small business owners waste hours chasing payments. QuickBooks fires off the sam
 
 But a follow-up that says *"Hey John, you said you'd pay Friday — I still haven't seen it"* actually gets a response. The problem is nobody has time to write those by hand.
 
-We analyzed **14,904 small business pain signals** across Reddit, X, and forums. Getting paid is the **#1 pain** with the **fewest solutions** — 47 tools compete for lead generation, but only 11 address collections. That's the gap.
+We analyzed **15,000+ small business pain signals** across Reddit, X, and forums. Getting paid is the **#1 pain** with the **fewest solutions** — the market is saturated with lead-gen tools, but barely anyone does collections. That's the gap.
 
 ## The Agent Loop
 
