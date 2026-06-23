@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isDemoRequest, getDemoUserId } from "@/lib/demo";
+import { checkRateLimit, LLM_RATE_LIMIT } from "@/lib/rate-limit";
 import { execFile } from "child_process";
 import { promisify } from "util";
 
@@ -41,6 +42,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     userId = session.user.id;
+  }
+
+  // Rate limit LLM calls
+  const rl = checkRateLimit(`llm:${userId}`, LLM_RATE_LIMIT);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
   }
 
   let body: { invoiceId?: string };
@@ -147,8 +157,9 @@ Rules:
     });
   } catch (e: any) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[simulate] simulation failed:", msg);
     return NextResponse.json(
-      { error: "Simulation failed:" },
+      { error: "Simulation failed" },
       { status: 502 }
     );
   }

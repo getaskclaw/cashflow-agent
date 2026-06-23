@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isDemoRequest, getDemoUserId } from "@/lib/demo";
+import { checkRateLimit, BATCH_RATE_LIMIT } from "@/lib/rate-limit";
 import { execFile } from "child_process";
 import { promisify } from "util";
 
@@ -46,6 +47,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     userId = session.user.id;
+  }
+
+  // Rate limit batch LLM calls (stricter — N calls per request)
+  const rl = checkRateLimit(`batch:${userId}`, BATCH_RATE_LIMIT);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Try again in ${rl.retryAfter}s.` },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
   }
 
   // Find all overdue + promised-expired invoices

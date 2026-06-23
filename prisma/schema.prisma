@@ -110,7 +110,7 @@ model Invoice {
   customerId      String
   customer        Customer @relation(fields: [customerId], references: [id])
 
-  invoiceNumber   String   @unique
+  invoiceNumber   String
   amount          Int      // cents
   currency        String   @default("usd")
   description     String?
@@ -131,6 +131,7 @@ model Invoice {
   communications Communication[]
 
   @@index([userId, status])
+  @@unique([userId, invoiceNumber])
 }
 
 model Communication {

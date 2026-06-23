@@ -81,8 +81,9 @@ export async function POST(req: Request) {
     parsed = JSON.parse(proc.stdout);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[reply] parse_reply failed:", msg);
     return NextResponse.json(
-      { error: "Reply parsing failed:" },
+      { error: "Reply parsing failed" },
       { status: 502 }
     );
   }
@@ -94,22 +95,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Store the inbound communication with parsed metadata
-  const communication = await prisma.communication.create({
-    data: {
-      invoiceId,
-      direction: "inbound",
-      channel: "email",
-      content: replyText.trim(),
-      parsedStatus: parsed.parsed_status,
-      parsedPromiseDate: parsed.parsed_promise_date
-        ? new Date(parsed.parsed_promise_date)
-        : null,
-      parsedSummary: parsed.parsed_summary,
-    },
-  });
-
-  // Update invoice status based on parsed result
+  // Store the inbound communication + update invoice status atomically
   const updates: { status?: string; promiseDate?: Date | null } = {};
 
   if (parsed.parsed_status === "promised" && parsed.parsed_promise_date) {
@@ -119,12 +105,24 @@ export async function POST(req: Request) {
     updates.status = "disputed";
   }
 
-  if (Object.keys(updates).length > 0) {
-    await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: updates,
-    });
-  }
+  const [communication] = await prisma.$transaction([
+    prisma.communication.create({
+      data: {
+        invoiceId,
+        direction: "inbound",
+        channel: "email",
+        content: replyText.trim(),
+        parsedStatus: parsed.parsed_status,
+        parsedPromiseDate: parsed.parsed_promise_date
+          ? new Date(parsed.parsed_promise_date)
+          : null,
+        parsedSummary: parsed.parsed_summary,
+      },
+    }),
+    ...(Object.keys(updates).length > 0
+      ? [prisma.invoice.update({ where: { id: invoiceId }, data: updates })]
+      : []),
+  ]);
 
   return NextResponse.json({
     ok: true,

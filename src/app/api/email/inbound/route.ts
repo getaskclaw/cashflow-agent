@@ -129,31 +129,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, message: "Stored reply (parse failed)" });
     }
 
-    await prisma.communication.create({
-      data: {
-        invoiceId,
-        direction: "inbound",
-        channel: "email",
-        content: text,
-        parsedStatus: parsed.parsed_status,
-        parsedPromiseDate: parsed.parsed_promise_date
-          ? new Date(parsed.parsed_promise_date)
-          : null,
-        parsedSummary: parsed.parsed_summary,
-      },
-    });
+    const updates: { status: string; promiseDate?: Date } | null =
+      parsed.parsed_status === "promised" && parsed.parsed_promise_date
+        ? { status: "promised", promiseDate: new Date(parsed.parsed_promise_date) }
+        : parsed.parsed_status === "disputed"
+          ? { status: "disputed" }
+          : null;
 
-    if (parsed.parsed_status === "promised" && parsed.parsed_promise_date) {
-      await prisma.invoice.update({
-        where: { id: invoiceId },
-        data: { status: "promised", promiseDate: new Date(parsed.parsed_promise_date) },
-      });
-    } else if (parsed.parsed_status === "disputed") {
-      await prisma.invoice.update({
-        where: { id: invoiceId },
-        data: { status: "disputed" },
-      });
-    }
+    await prisma.$transaction([
+      prisma.communication.create({
+        data: {
+          invoiceId,
+          direction: "inbound",
+          channel: "email",
+          content: text,
+          parsedStatus: parsed.parsed_status,
+          parsedPromiseDate: parsed.parsed_promise_date
+            ? new Date(parsed.parsed_promise_date)
+            : null,
+          parsedSummary: parsed.parsed_summary,
+        },
+      }),
+      ...(updates
+        ? [prisma.invoice.update({ where: { id: invoiceId }, data: updates })]
+        : []),
+    ]);
 
     console.log(`[inbound] Reply for ${invoice.invoiceNumber}: ${parsed.parsed_status}`);
 

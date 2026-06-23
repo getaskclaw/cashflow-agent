@@ -60,22 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
-  // Record the approved outbound communication
-  const communication = await prisma.communication.create({
-    data: {
-      invoiceId,
-      direction: "outbound",
-      channel: "email",
-      content: draftText.trim(),
-      agentDraft: true,
-      approved: true,
-      sentAt: new Date(),
-      parsedSummary: tone ? `Approved draft (tone: ${tone})` : "Approved draft",
-    },
-  });
-
-  // Actually send the email via Resend (or simulate in demo mode)
-  // Reply-to address includes invoiceId so inbound replies can be auto-matched
+  // Actually send the email FIRST — if this fails, we don't record anything
   const replyToDomain = process.env.EMAIL_DOMAIN || "cashflowagent.dev";
   const emailResult = await sendEmail({
     to: invoice.customer.email,
@@ -84,23 +69,32 @@ export async function POST(req: Request) {
     replyTo: `reply+${invoiceId}@${replyToDomain}`,
   });
 
-  // Record agent spending — symbolic email delivery cost
-  const invoiceRecord = await prisma.invoice.findUnique({
-    where: { id: invoiceId },
-    select: { invoiceNumber: true },
-  });
-
-  await prisma.transaction.create({
-    data: {
-      userId,
-      stripeChargeId: `agent_send_${invoiceId}_${Date.now()}`,
-      amount: 25, // $0.25 in cents — symbolic email delivery cost
-      currency: "usd",
-      customerName: emailResult.sent ? "Email Delivery (Resend)" : "Email Delivery (simulated)",
-      description: `Agent email send — ${invoiceRecord?.invoiceNumber || invoiceId}`,
-      createdAt: new Date(),
-    },
-  });
+  // Record communication + spending atomically in a single transaction
+  const [communication] = await prisma.$transaction([
+    prisma.communication.create({
+      data: {
+        invoiceId,
+        direction: "outbound",
+        channel: "email",
+        content: draftText.trim(),
+        agentDraft: true,
+        approved: true,
+        sentAt: new Date(),
+        parsedSummary: tone ? `Approved draft (tone: ${tone})` : "Approved draft",
+      },
+    }),
+    prisma.transaction.create({
+      data: {
+        userId,
+        stripeChargeId: `agent_send_${invoiceId}_${Date.now()}`,
+        amount: 25, // $0.25 in cents — symbolic email delivery cost
+        currency: "usd",
+        customerName: emailResult.sent ? "Email Delivery (Resend)" : "Email Delivery (simulated)",
+        description: `Agent email send — ${invoice.invoiceNumber}`,
+        createdAt: new Date(),
+      },
+    }),
+  ]);
 
   return NextResponse.json({
     ok: true,

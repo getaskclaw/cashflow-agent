@@ -14,9 +14,17 @@ export async function POST(req: Request) {
     const stripe = getStripeClient();
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+    if (!webhookSecret) {
+      console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set — all webhooks will fail");
+      return NextResponse.json(
+        { error: "Webhook secret not configured" },
+        { status: 500 }
+      );
+    }
+
     let event;
     try {
-      event = stripe.webhooks.constructEvent(raw, signature, webhookSecret!);
+      event = stripe.webhooks.constructEvent(raw, signature, webhookSecret);
     } catch {
       return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
@@ -32,7 +40,7 @@ export async function POST(req: Request) {
           break;
         }
 
-        const invoice = await prisma.invoice.findUnique({
+        const invoice = await prisma.invoice.findFirst({
           where: { invoiceNumber },
         });
 

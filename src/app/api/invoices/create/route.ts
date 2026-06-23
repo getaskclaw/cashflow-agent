@@ -85,16 +85,8 @@ export async function POST(req: Request) {
       });
     }
 
-    // Check invoice number uniqueness
-    const existingInvoice = await prisma.invoice.findUnique({
-      where: { invoiceNumber },
-      select: { id: true },
-    });
-    if (existingInvoice) {
-      return NextResponse.json({ error: `Invoice ${invoiceNumber} already exists` }, { status: 409 });
-    }
-
-    // Create invoice (amount in cents)
+    // Create invoice (amount in cents) — per-user unique invoiceNumber
+    // No separate check-then-create: let the DB constraint catch duplicates
     const invoice = await prisma.invoice.create({
       data: {
         userId,
@@ -115,7 +107,14 @@ export async function POST(req: Request) {
       customerName: customer.name,
     });
   } catch (error: any) {
-    console.error("Create invoice error:", error);
+    // P2002 = unique constraint violation
+    if (error?.code === "P2002") {
+      return NextResponse.json(
+        { error: `Invoice number ${invoiceNumber} already exists for your account` },
+        { status: 409 }
+      );
+    }
+    console.error("Create invoice error:", error?.code || error?.message);
     return NextResponse.json(
       { error: "Failed to create invoice" },
       { status: 500 }
