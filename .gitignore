@@ -6,5 +6,7 @@ node_modules/
 .env.production
 logs/
 test-results/
+tests/
+vitest.config.ts
 # screenshots/ # keep dashboard screenshots in repo
 tsconfig.tsbuildinfo
