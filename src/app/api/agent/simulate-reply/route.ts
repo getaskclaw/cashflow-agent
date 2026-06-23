@@ -4,16 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isDemoRequest, getDemoUserId } from "@/lib/demo";
 import { checkRateLimit, LLM_RATE_LIMIT } from "@/lib/rate-limit";
-import { execFile } from "child_process";
-import { promisify } from "util";
-
-const execFileAsync = promisify(execFile);
-
-const SCRIPTS_DIR =
-  process.env.CASHFLOW_SCRIPTS_DIR ||
-  `${process.cwd()}/hermes-skill/scripts`;
-
-const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
+import { callLLM } from "@/lib/llm";
 
 /**
  * Simulation mode — generates a realistic customer reply using the LLM.
@@ -45,10 +36,10 @@ export async function POST(req: Request) {
   }
 
   // Rate limit LLM calls
-  const rl = checkRateLimit(`llm:${userId}`, LLM_RATE_LIMIT);
+  const rl = checkRateLimit("llm:" + userId, LLM_RATE_LIMIT);
   if (!rl.allowed) {
     return NextResponse.json(
-      { error: `Rate limit exceeded. Try again in ${rl.retryAfter}s.` },
+      { error: "Rate limit exceeded. Try again in " + rl.retryAfter + "s." },
       { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
     );
   }
@@ -98,7 +89,7 @@ export async function POST(req: Request) {
   const history = invoice.communications
     .map((c) => {
       const who = c.direction === "inbound" ? "Customer" : "Agent";
-      return `${who}: ${c.content.trim()}`;
+      return who + ": " + c.content.trim();
     })
     .join("\n\n") || "(no prior messages)";
 
@@ -114,36 +105,31 @@ export async function POST(req: Request) {
 
   const personality = invoice.customer.notes || "No personality notes available.";
 
-  const prompt = `You are roleplaying as a small business customer who just received a follow-up email about an overdue invoice. Write a realistic reply email.
+  const prompt =
+    "You are roleplaying as a small business customer who just received a follow-up email about an overdue invoice. Write a realistic reply email.\n\n" +
+    "Customer profile:\n" +
+    "- Name: " + invoice.customer.name + "\n" +
+    "- Personality notes: " + personality + "\n" +
+    "- Invoice: #" + invoice.invoiceNumber + " for " + amountDisplay + " (" + daysOverdue + " days overdue)\n" +
+    "- Work done: " + (invoice.description || "Not specified") + "\n\n" +
+    "Conversation so far (oldest first):\n" + history + "\n\n" +
+    "Rules:\n" +
+    "- Write ONLY the email body (no subject line).\n" +
+    '- Start with "Hi Alex," or similar.\n' +
+    "- Be realistic and consistent with the customer's personality.\n" +
+    '- If the personality notes say "pays slow but always comes through," lean toward making a promise.\n' +
+    '- If the tone of the last agent email was "final" or very firm, the customer might push back, ask for more time, or dispute.\n' +
+    '- If the tone was "polite" or "friendly," the customer is more likely to be apologetic and promise to pay.\n' +
+    "- Keep it under 100 words. Natural, casual tone. No corporate speak.\n" +
+    "- Do NOT include any meta-commentary or explanations. Just write the email.";
 
-Customer profile:
-- Name: ${invoice.customer.name}
-- Personality notes: ${personality}
-- Invoice: #${invoice.invoiceNumber} for ${amountDisplay} (${daysOverdue} days overdue)
-- Work done: ${invoice.description || "Not specified"}
-
-Conversation so far (oldest first):
-${history}
-
-Rules:
-- Write ONLY the email body (no subject line).
-- Start with "Hi Alex," or similar.
-- Be realistic and consistent with the customer's personality.
-- If the personality notes say "pays slow but always comes through," lean toward making a promise.
-- If the tone of the last agent email was "final" or very firm, the customer might push back, ask for more time, or dispute.
-- If the tone was "polite" or "friendly," the customer is more likely to be apologetic and promise to pay.
-- Keep it under 100 words. Natural, casual tone. No corporate speak.
-- Do NOT include any meta-commentary or explanations. Just write the email.`;
-
-  // Call Hermes CLI to generate the reply
   try {
-    const proc = await execFileAsync(
-      "hermes",
-      ["chat", "-q", prompt, "-Q"],
-      { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 }
+    const response = await callLLM(
+      [{ role: "user", content: prompt }],
+      { maxTokens: 2000, temperature: 0.8 }
     );
 
-    const replyText = proc.stdout.trim();
+    const replyText = response.content.trim();
 
     if (!replyText || replyText.length < 10) {
       return NextResponse.json({ error: "Generated reply was too short" }, { status: 500 });
@@ -155,7 +141,7 @@ Rules:
       customerName: invoice.customer.name,
       invoiceNumber: invoice.invoiceNumber,
     });
-  } catch (e: any) {
+  } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[simulate] simulation failed:", msg);
     return NextResponse.json(

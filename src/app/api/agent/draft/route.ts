@@ -4,16 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isDemoRequest, getDemoUserId } from "@/lib/demo";
 import { checkRateLimit, LLM_RATE_LIMIT } from "@/lib/rate-limit";
-import { execFile } from "child_process";
-import { promisify } from "util";
-
-const execFileAsync = promisify(execFile);
-
-const SCRIPTS_DIR =
-  process.env.CASHFLOW_SCRIPTS_DIR ||
-  `${process.cwd()}/hermes-skill/scripts`;
-
-const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
+import { draftFollowup } from "@/lib/agent";
 
 export async function POST(req: Request) {
   let userId: string;
@@ -44,23 +35,20 @@ export async function POST(req: Request) {
     );
   }
 
-  let invoiceId: string;
+  let body: { invoiceId?: string; tone?: string };
   try {
-    const body = await req.json();
-    invoiceId = body?.invoiceId;
+    body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  const { invoiceId, tone } = body || {};
+
   if (!invoiceId || typeof invoiceId !== "string") {
-    return NextResponse.json(
-      { error: "Missing or invalid invoiceId" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing invoiceId" }, { status: 400 });
   }
 
-  // Verify the invoice belongs to the acting user before letting the
-  // agent scripts touch it.
+  // Verify ownership
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: { userId: true },
@@ -69,67 +57,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
-  const env = {
-    ...process.env,
-    CASHFLOW_DB: process.env.CASHFLOW_DB || undefined,
-  };
-
   try {
-    // 1. Read the full customer thread (invoice + customer + comms).
-    const threadProc = await execFileAsync(
-      PYTHON,
-      [`${SCRIPTS_DIR}/read_customer_thread.py`, invoiceId],
-      { env, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 }
-    );
-    const thread = JSON.parse(threadProc.stdout);
-
-    if (thread?.error) {
-      return NextResponse.json(
-        { error: `read_customer_thread: ${thread.error}` },
-        { status: 500 }
-      );
-    }
-
-    // 2. Draft the follow-up email via the agent.
-    let draft: { draft?: string; suggested_tone?: string; error?: string };
-    try {
-      const draftProc = await execFileAsync(
-        PYTHON,
-        [`${SCRIPTS_DIR}/draft_followup.py`, invoiceId],
-        { env, timeout: 150_000, maxBuffer: 4 * 1024 * 1024 }
-      );
-      draft = JSON.parse(draftProc.stdout);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[draft] draft_followup failed:", msg);
-      return NextResponse.json(
-        { error: "Draft generation failed" },
-        { status: 502 }
-      );
-    }
-
-    if (draft?.error) {
-      return NextResponse.json(
-        { error: `draft_followup: ${draft.error}` },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      invoice: thread.invoice,
-      customer: thread.customer,
-      communications: thread.communications,
-      daysOverdue: thread.days_overdue,
-      priorFollowupCount: thread.prior_followup_count,
-      lastPromiseDate: thread.last_promise_date,
-      draft: draft.draft || "",
-      suggestedTone: draft.suggested_tone || "polite",
-    });
+    const result = await draftFollowup(invoiceId, tone);
+    return NextResponse.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[draft] draftFollowup failed:", msg);
     return NextResponse.json(
-      { error: "Agent error:" },
-      { status: 500 }
+      { error: "Draft generation failed" },
+      { status: 502 }
     );
   }
 }

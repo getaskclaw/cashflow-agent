@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 const SCRIPTS_DIR =
   process.env.CASHFLOW_SCRIPTS_DIR ||
-  `${process.cwd()}/hermes-skill/scripts`;
+  process.cwd() + "/hermes-skill/scripts";
 
 const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
 
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
   try {
     const proc = await execFileAsync(
       PYTHON,
-      [`${SCRIPTS_DIR}/schedule_followup.py`, invoiceId, date],
+      [SCRIPTS_DIR + "/schedule_followup.py", invoiceId, date],
       { env, timeout: 90_000, maxBuffer: 4 * 1024 * 1024 }
     );
 
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
 
     if (parsed && (parsed as { error?: string }).error) {
       return NextResponse.json(
-        { error: `schedule_followup: ${(parsed as { error: string }).error}` },
+        { error: "schedule_followup: " + (parsed as { error: string }).error },
         { status: 500 }
       );
     }
@@ -97,8 +97,9 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[schedule] failed:", msg);
     return NextResponse.json(
-      { error: "Agent error:" },
+      { error: "Scheduling failed" },
       { status: 500 }
     );
   }
