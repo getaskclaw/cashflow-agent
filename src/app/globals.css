@@ -3,17 +3,39 @@
 @tailwind utilities;
 
 :root {
+  /* Primary accent — indigo */
   --accent: #6366f1;
   --accent-light: #818cf8;
-  --bg: #0a0a0f;
-  --surface: #12121a;
-  --border: #1e1e2e;
-  --text: #e8e8ed;
-  --text-dim: #8888a0;
-  --green: #22c55e;
-  --red: #ef4444;
-  --danger: #ef4444;
-  --amber: #f59e0b;
+  --accent-glow: rgba(99, 102, 241, 0.15);
+
+  /* Backgrounds — elevated grays, not void black */
+  --bg: #131316;
+  --surface: #1c1c22;
+  --surface-2: #232330;
+  --surface-hover: #2a2a38;
+  --border: #2e2e3a;
+  --border-light: #3a3a48;
+
+  /* Text — warm white, not cold gray */
+  --text: #f0f0f5;
+  --text-dim: #9999aa;
+  --text-muted: #6b6b80;
+
+  /* Semantic colors — slightly muted for sophistication */
+  --green: #34d399;
+  --red: #f87171;
+  --danger: #f87171;
+  --amber: #fbbf24;
+
+  /* Shadows — for depth on cards */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.08);
+
+  /* Gradients — for premium accents */
+  --gradient-accent: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+  --gradient-surface: linear-gradient(180deg, #1c1c22 0%, #181820 100%);
 }
 
 body {
@@ -21,8 +43,64 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle ambient glow on the page — gives depth without being distracting */
+body::before {
+  content: '';
+  position: fixed;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 400px;
+  background: radial-gradient(ellipse at center, var(--accent-glow) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure content sits above the ambient glow */
+main, header {
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes cfspin {
   to { transform: rotate(360deg); }
+}
+
+/* Smooth transitions on interactive elements */
+button, a {
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+button:hover, a:hover {
+  opacity: 0.9;
+}
+
+/* Custom scrollbar — subtle, not jarring */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Selection color */
+::selection {
+  background: var(--accent);
+  color: #fff;
 }

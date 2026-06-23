@@ -161,14 +161,10 @@ export default function HomePage() {
                   gap: 10,
                   background: "#fff",
                   color: "#1a1a1a",
-                  border: "none",
+                  border: "1px solid #e0e0e0",
                   padding: "14px 28px",
-                  borderRadius: 10,
-                  fontSize: 15,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                  borderRadius: 12,
+                  boxShadow: "var(--shadow-md)",
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24">

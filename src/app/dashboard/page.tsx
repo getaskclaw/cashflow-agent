@@ -578,8 +578,8 @@ export default function DashboardPage() {
       <main style={{ maxWidth: 900, margin: "0 auto", padding: "24px" }}>
         {/* Stripe Connection */}
         <div style={{
-          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12,
-          padding: "16px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "var(--gradient-surface)", border: "1px solid var(--border)", borderRadius: 14,
+          padding: "16px 24px", boxShadow: "var(--shadow-md)", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
@@ -676,7 +676,7 @@ export default function DashboardPage() {
             { label: "At Risk", value: cf ? formatCents(cf.atRisk) : "$0", color: "var(--amber)" },
           ].map((stat) => (
             <div key={stat.label} style={{
-              background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 20px",
+              background: "var(--gradient-surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 20px", boxShadow: "var(--shadow-sm)",
             }}>
               <div style={{ color: "var(--text-dim)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
                 {stat.label}
@@ -1118,7 +1118,7 @@ export default function DashboardPage() {
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "flex-end", zIndex: 998,
         }}>
           <div onClick={(e) => e.stopPropagation()} style={{
-            background: "var(--surface)", borderLeft: "1px solid var(--border)",
+            background: "var(--gradient-surface)", borderLeft: "1px solid var(--border-light)",
             width: "100%", maxWidth: 520, height: "100%", overflow: "auto", padding: 24,
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -1220,7 +1220,7 @@ export default function DashboardPage() {
       {toast && (
         <div style={{
           position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
-          background: "var(--surface)", border: `1px solid ${toast.kind === "ok" ? "var(--green)" : "var(--danger)"}`,
+          background: "var(--surface-2)", border: `1px solid ${toast.kind === "ok" ? "var(--green)" : "var(--danger)"}`,
           color: toast.kind === "ok" ? "var(--green)" : "var(--danger)", padding: "10px 16px", borderRadius: 8,
           fontSize: 13, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 1000, maxWidth: "90vw",
         }}>
