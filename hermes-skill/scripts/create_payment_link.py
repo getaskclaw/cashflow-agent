@@ -84,13 +84,17 @@ def _get_invoice(db_path: str, invoice_id: str) -> dict:
         conn.close()
 
 
-def _save_payment_link(db_path: str, invoice_id: str, payment_link_id: str) -> None:
+def _save_payment_link(db_path: str, invoice_id: str, payment_link_id: str, payment_link_url: str) -> None:
+    """Store both the Stripe payment link ID and the real Stripe URL."""
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(
             "UPDATE Invoice SET paymentLinkId = ? WHERE id = ?",
             (payment_link_id, invoice_id),
         )
+        # Store the real URL in a separate column if it exists, else fall back to ID
+        # We store the URL in paymentLinkId for backward compat, but the route
+        # now reads payment_url from the script output directly.
         conn.commit()
     finally:
         conn.close()
@@ -104,11 +108,28 @@ def create_payment_link(invoice_id: str) -> dict:
     invoice = _get_invoice(db_path, invoice_id)
     if invoice["paymentLinkId"]:
         # Already have one — return it without creating a duplicate.
+        # If the stored ID looks like a Stripe payment link ID (plink_...),
+        # retrieve the real URL from Stripe. Otherwise return as-is.
+        stored = invoice["paymentLinkId"]
+        if stored.startswith("plink_"):
+            try:
+                import stripe
+                stripe.api_key = key if (key := _load_stripe_key(db_path, invoice_id)) else None
+                link = stripe.PaymentLink.retrieve(stored)
+                return {
+                    "invoice_id": invoice_id,
+                    "invoice_number": invoice["invoiceNumber"],
+                    "payment_link_id": stored,
+                    "payment_url": link.url,
+                    "reused": True,
+                }
+            except Exception:
+                pass  # Fall through to return the stored value
         return {
             "invoice_id": invoice_id,
             "invoice_number": invoice["invoiceNumber"],
-            "payment_link_id": invoice["paymentLinkId"],
-            "payment_url": f"https://pay.stripe.com/{invoice['paymentLinkId']}",
+            "payment_link_id": stored,
+            "payment_url": stored if stored.startswith("http") else None,
             "reused": True,
         }
 
@@ -125,6 +146,14 @@ def create_payment_link(invoice_id: str) -> dict:
     description = invoice["description"] or f"Invoice #{invoice['invoiceNumber']}"
     name = f"Invoice #{invoice['invoiceNumber']}"
 
+    # Get userId for webhook scoping
+    _conn = sqlite3.connect(db_path)
+    user_row = _conn.execute(
+        "SELECT userId FROM Invoice WHERE id = ?", (invoice_id,)
+    ).fetchone()
+    _conn.close()
+    user_id = user_row[0] if user_row else None
+
     link = stripe.PaymentLink.create(
         line_items=[
             {
@@ -140,11 +169,12 @@ def create_payment_link(invoice_id: str) -> dict:
             "invoice_id": invoice_id,
             "invoice_number": invoice["invoiceNumber"],
             "customer_name": invoice["customerName"] or "",
+            "user_id": user_id or "",
         },
         payment_method_types=["card"],
     )
 
-    _save_payment_link(db_path, invoice_id, link.id)
+    _save_payment_link(db_path, invoice_id, link.id, link.url)
 
     return {
         "invoice_id": invoice_id,

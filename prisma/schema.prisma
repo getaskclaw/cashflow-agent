@@ -44,6 +44,8 @@ model User {
   sessions      Session[]
 
   stripeConnection StripeConnection?
+  subscription     Subscription?
+  businessProfile  BusinessProfile?
   transactions     Transaction[]
   customers        Customer[]
   invoices         Invoice[]
@@ -68,6 +70,45 @@ model StripeConnection {
   stripeUserId    String?
   connectedAt     DateTime @default(now())
   livemode        Boolean  @default(true)
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Stripe IDs
+  stripeCustomerId     String   @unique
+  stripeSubscriptionId String?  @unique
+  stripePriceId        String?
+  stripeProductId      String?
+
+  // Plan
+  plan                 String   @default("free")  // free | starter | pro | business
+  status               String   @default("active") // active | trialing | past_due | canceled | incomplete
+  currentPeriodEnd     DateTime?
+
+  // Cancellation
+  cancelAtPeriodEnd    Boolean  @default(false)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model BusinessProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyName     String   @default("My Company")
+  senderName      String   @default("Accounts Team")
+  senderEmail     String?
+  locale          String   @default("en-GB")
+  baseCurrency    String   @default("GBP")
+  vatNumber       String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model Transaction {
@@ -112,7 +153,7 @@ model Invoice {
 
   invoiceNumber   String
   amount          Int      // cents
-  currency        String   @default("usd")
+  currency        String   @default("gbp")
   description     String?
 
   dueDate         DateTime

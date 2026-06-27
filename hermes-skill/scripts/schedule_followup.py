@@ -42,8 +42,10 @@ def _validate_date(date_str: str) -> datetime:
 
 
 def _cron_schedule(date: datetime) -> str:
-    # Cron: minute hour day month *  — fires once at 09:00 local on that date.
-    return f"0 9 {date.day} {date.month} *"
+    # Use ISO 8601 date string for one-shot scheduling.
+    # Hermes cron supports ISO timestamps for one-shot jobs.
+    # This avoids the yearly recurrence problem of `0 9 D M *` cron.
+    return date.strftime("%Y-%m-%dT09:00:00")
 
 
 def _build_prompt(invoice_id: str, target_date: datetime) -> str:
@@ -56,7 +58,8 @@ def _build_prompt(invoice_id: str, target_date: datetime) -> str:
         f"tone one step and re-run the collections loop in the cashflow-agent skill. "
         f"If status is 'paid', do nothing and remove this cron job. "
         f"If the customer has replied since the last check, run "
-        f"`python3 {SCRIPT_DIR}/parse_reply.py {invoice_id} '<reply_text>'` first."
+        f"`python3 {SCRIPT_DIR}/parse_reply.py {invoice_id} '<reply_text>'` first. "
+        f"If no new reply has been received, skip parse_reply and proceed with escalation."
     )
 
 

@@ -67,7 +67,9 @@ export async function POST(req: Request) {
       ok: true,
       invoiceNumber: invoice.invoiceNumber,
       paymentLinkId: existing.paymentLinkId,
-      paymentLinkUrl: existing.paymentLinkId,
+      paymentLinkUrl: existing.paymentLinkId.startsWith("http")
+        ? existing.paymentLinkId
+        : null,
       existing: true,
     });
   }
@@ -109,8 +111,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       invoiceNumber: invoice.invoiceNumber,
-      paymentLinkId: parsed.payment_link_id || parsed.url || null,
-      paymentLinkUrl: parsed.url || parsed.payment_link_url || null,
+      paymentLinkId: parsed.payment_link_id || null,
+      paymentLinkUrl: parsed.payment_url || null,
+      reused: parsed.reused || false,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

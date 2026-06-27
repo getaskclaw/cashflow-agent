@@ -203,7 +203,10 @@ export default function HomePage() {
             marginTop: 24,
           }}
         >
-          No credit card required. Your Stripe data never leaves your control.
+          No credit card required. Your Stripe data never leaves your control.{" "}
+          <a href="/pricing" style={{ color: "var(--accent)", textDecoration: "none" }}>
+            See pricing →
+          </a>
         </p>
       </main>
     </>

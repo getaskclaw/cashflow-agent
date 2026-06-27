@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStripeClient } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
+import { planFromPriceId } from "@/lib/subscription";
 
 export async function POST(req: Request) {
   try {
@@ -31,17 +32,70 @@ export async function POST(req: Request) {
 
     // Handle the event
     switch (event.type) {
+      // ─── Invoice payment events (existing) ───────────────────
       case "checkout.session.completed": {
         const session = event.data.object as any;
-        const invoiceNumber = session.client_reference_id || session.metadata?.invoiceNumber;
+
+        // Handle subscription checkout (new subscriptions/upgrades)
+        if (session.mode === "subscription") {
+          const userId = session.metadata?.userId;
+          const plan = session.metadata?.plan;
+
+          if (userId) {
+            const subscriptionId = session.subscription as string;
+            const stripeSub = await stripe.subscriptions.retrieve(subscriptionId);
+
+            await prisma.subscription.upsert({
+              where: { userId },
+              update: {
+                stripeSubscriptionId: subscriptionId,
+                stripePriceId: stripeSub.items.data[0]?.price?.id || null,
+                stripeProductId: stripeSub.items.data[0]?.price?.product as string || null,
+                plan: plan || planFromPriceId(stripeSub.items.data[0]?.price?.id || ""),
+                status: stripeSub.status,
+                currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+                cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+              },
+              create: {
+                userId,
+                stripeCustomerId: session.customer as string,
+                stripeSubscriptionId: subscriptionId,
+                stripePriceId: stripeSub.items.data[0]?.price?.id || null,
+                stripeProductId: stripeSub.items.data[0]?.price?.product as string || null,
+                plan: plan || planFromPriceId(stripeSub.items.data[0]?.price?.id || ""),
+                status: stripeSub.status,
+                currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+                cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+              },
+            });
+
+            console.log(`[stripe-webhook] Subscription updated: user=${userId} plan=${plan}`);
+            break;
+          }
+        }
+
+        // Handle one-time invoice payment (existing logic)
+        // Read from metadata using consistent field names.
+        // The Python script writes invoice_id, invoice_number, customer_name.
+        // We support both invoiceNumber and invoice_id for backward compat.
+        const invoiceNumber =
+          session.metadata?.invoice_number ||
+          session.metadata?.invoiceNumber ||
+          session.client_reference_id;
 
         if (!invoiceNumber) {
-          console.warn("Webhook: no invoiceNumber in session metadata", session.id);
+          console.warn("Webhook: no invoice_number in session metadata", session.id);
           break;
         }
 
+        // Scope the lookup by userId from metadata to prevent cross-user collisions.
+        // The schema allows the same invoice number for different users.
+        const metadataUserId = session.metadata?.user_id || session.metadata?.userId;
+
         const invoice = await prisma.invoice.findFirst({
-          where: { invoiceNumber },
+          where: metadataUserId
+            ? { userId: metadataUserId, invoiceNumber }
+            : { invoiceNumber },
         });
 
         if (!invoice) {
@@ -50,7 +104,6 @@ export async function POST(req: Request) {
         }
 
         if (invoice.status === "paid") {
-          // Already paid, skip
           break;
         }
 
@@ -96,6 +149,73 @@ export async function POST(req: Request) {
         if (invNumber) {
           console.log(`Webhook: payment link expired for invoice ${invNumber}`);
         }
+        break;
+      }
+
+      // ─── Subscription lifecycle events ───────────────────────
+      case "customer.subscription.updated":
+      case "customer.subscription.created": {
+        const stripeSub = event.data.object as any;
+        const customerId = stripeSub.customer as string;
+
+        const sub = await prisma.subscription.findUnique({
+          where: { stripeCustomerId: customerId },
+        });
+
+        if (!sub) {
+          console.warn(`[stripe-webhook] No subscription record for customer ${customerId}`);
+          break;
+        }
+
+        const priceId = stripeSub.items?.data?.[0]?.price?.id || null;
+        await prisma.subscription.update({
+          where: { userId: sub.userId },
+          data: {
+            stripeSubscriptionId: stripeSub.id,
+            stripePriceId: priceId,
+            stripeProductId: stripeSub.items?.data?.[0]?.price?.product || null,
+            plan: planFromPriceId(priceId || ""),
+            status: stripeSub.status,
+            currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+          },
+        });
+
+        console.log(`[stripe-webhook] Subscription ${event.type}: user=${sub.userId} status=${stripeSub.status}`);
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const stripeSub = event.data.object as any;
+        const customerId = stripeSub.customer as string;
+
+        const sub = await prisma.subscription.findUnique({
+          where: { stripeCustomerId: customerId },
+        });
+
+        if (!sub) break;
+
+        await prisma.subscription.update({
+          where: { userId: sub.userId },
+          data: {
+            plan: "free",
+            status: "canceled",
+            cancelAtPeriodEnd: false,
+            stripeSubscriptionId: null,
+            stripePriceId: null,
+            stripeProductId: null,
+          },
+        });
+
+        console.log(`[stripe-webhook] Subscription canceled: user=${sub.userId}`);
+        break;
+      }
+
+      // ─── Customer updates (sync email etc.) ──────────────────
+      case "customer.updated": {
+        const customer = event.data.object as any;
+        // No-op for now — customer data is read on demand
+        console.log(`[stripe-webhook] Customer updated: ${customer.id}`);
         break;
       }
 

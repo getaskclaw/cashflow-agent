@@ -11,6 +11,7 @@
 
 import { prisma } from "@/lib/db";
 import { callLLM, type LLMMessage } from "@/lib/llm";
+import { getBusinessProfile, formatCurrency } from "@/lib/business-profile";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ export interface CustomerThread {
     content: string;
     sentAt: string | null;
     parsedStatus: string | null;
+    parsedPromiseDate: string | null;
     parsedSummary: string | null;
     createdAt: string;
   }[];
@@ -95,6 +97,7 @@ export async function readCustomerThread(invoiceId: string): Promise<CustomerThr
           content: true,
           sentAt: true,
           parsedStatus: true,
+          parsedPromiseDate: true,
           parsedSummary: true,
           createdAt: true,
         },
@@ -114,9 +117,10 @@ export async function readCustomerThread(invoiceId: string): Promise<CustomerThr
   ).length;
 
   // Find the latest promise date across communications + invoice
+  // Use parsedPromiseDate from classified replies, NOT message timestamps
   const commPromiseDates = invoice.communications
-    .filter((c) => c.parsedStatus === "promised")
-    .map((c) => c.sentAt || c.createdAt)
+    .filter((c) => c.parsedStatus === "promised" && c.parsedPromiseDate)
+    .map((c) => c.parsedPromiseDate!)
     .filter(Boolean) as Date[];
 
   const lastPromiseDate = [
@@ -154,6 +158,7 @@ export async function readCustomerThread(invoiceId: string): Promise<CustomerThr
       content: c.content,
       sentAt: c.sentAt?.toISOString() ?? null,
       parsedStatus: c.parsedStatus,
+      parsedPromiseDate: c.parsedPromiseDate?.toISOString().split("T")[0] ?? null,
       parsedSummary: c.parsedSummary,
       createdAt: c.createdAt.toISOString(),
     })),
@@ -174,7 +179,7 @@ function pickTone(thread: CustomerThread, override?: string): string {
   return "final";
 }
 
-function buildDraftPrompt(thread: CustomerThread, tone: string): string {
+function buildDraftPrompt(thread: CustomerThread, tone: string, profile?: { senderName: string; companyName: string; locale: string; baseCurrency: string } | null): string {
   const { invoice, customer, communications, daysOverdue, priorFollowupCount, lastPromiseDate } = thread;
 
   const history = communications
@@ -189,14 +194,30 @@ function buildDraftPrompt(thread: CustomerThread, tone: string): string {
     ? `The customer previously promised to pay by ${lastPromiseDate} — that date has passed.`
     : "No prior promise on file.";
 
+  // Include payment link if available
+  const paymentLinkNote = invoice.paymentLinkId
+    ? `\nPayment link: ${invoice.paymentLinkId}\nIf appropriate, include this payment link in your follow-up email so the customer can pay directly.`
+    : "";
+
+  // Use business profile settings, not hardcoded identity
+  const senderName = profile?.senderName || "Accounts Team";
+  const companyName = profile?.companyName || "the company";
+
+  // Use proper currency formatting
+  const amountDisplay = formatCurrency(
+    invoice.amountCents,
+    invoice.currency,
+    profile?.locale || "en-GB"
+  );
+
   return (
-    `You are a collections agent for a small business. Draft a ${tone} follow-up ` +
+    `You are a collections agent for ${companyName}. Draft a ${tone} follow-up ` +
     `email to a customer about an overdue invoice. Use plain text, no markdown. ` +
     `Keep it under 150 words. Always reference the invoice number and amount. ` +
-    `Do not invent facts. Sign off as 'Alex, Roofing Pro'.\n\n` +
+    `Do not invent facts. Sign off as '${senderName}, ${companyName}'.${paymentLinkNote}\n\n` +
     `Customer: ${customer.name} <${customer.email}>\n` +
     `Customer notes: ${customer.notes || "(none)"}\n` +
-    `Invoice: #${invoice.invoiceNumber} for $${invoice.amountDisplay} ${invoice.currency.toUpperCase()} ` +
+    `Invoice: #${invoice.invoiceNumber} for ${amountDisplay} ` +
     `(due ${invoice.dueDate}, ${daysOverdue} days overdue)\n` +
     `Description: ${invoice.description || "(none)"}\n` +
     `Prior follow-ups sent: ${priorFollowupCount}\n` +
@@ -212,7 +233,15 @@ export async function draftFollowup(
 ): Promise<DraftResult> {
   const thread = await readCustomerThread(invoiceId);
   const tone = pickTone(thread, toneOverride);
-  const prompt = buildDraftPrompt(thread, tone);
+
+  // Get the user's business profile for sender identity and currency
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { userId: true },
+  });
+  const profile = invoice ? await getBusinessProfile(invoice.userId) : null;
+
+  const prompt = buildDraftPrompt(thread, tone, profile);
 
   const response = await callLLM(
     [{ role: "user", content: prompt }],
@@ -262,7 +291,7 @@ function buildParsePrompt(thread: CustomerThread, replyText: string): string {
     `- parsed_status='ignored' if the reply is non-responsive or no reply at all.\n` +
     `- Today is ${today}.\n\n` +
     `Customer: ${customer.name}\n` +
-    `Invoice: #${invoice.invoiceNumber} for $${invoice.amountDisplay} ${invoice.currency.toUpperCase()} ` +
+    `Invoice: #${invoice.invoiceNumber} for ${invoice.currency.toLowerCase() === "gbp" ? "£" : invoice.currency.toLowerCase() === "eur" ? "€" : "$"}${invoice.amountDisplay} ${invoice.currency.toUpperCase()} ` +
     `(due ${invoice.dueDate}, ${daysOverdue} days overdue)\n` +
     `Prior follow-ups: ${priorFollowupCount}\n` +
     `Last promise on file: ${lastPromiseDate || "none"}\n\n` +

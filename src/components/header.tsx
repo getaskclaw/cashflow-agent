@@ -49,6 +49,18 @@ export function Header({ demo }: { demo?: boolean }) {
             >
               Reports
             </a>
+            <a
+              href="/billing"
+              style={{ color: "var(--text-dim)", textDecoration: "none" }}
+            >
+              Billing
+            </a>
+            <a
+              href="/settings"
+              style={{ color: "var(--text-dim)", textDecoration: "none" }}
+            >
+              Settings
+            </a>
           </nav>
         )}
       </div>

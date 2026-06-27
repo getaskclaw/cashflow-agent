@@ -1,16 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { parseReply } from "@/lib/agent";
 import crypto from "crypto";
-
-const execFileAsync = promisify(execFile);
-
-const SCRIPTS_DIR =
-  process.env.CASHFLOW_SCRIPTS_DIR ||
-  `${process.cwd()}/hermes-skill/scripts`;
-
-const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
 
 /**
  * Inbound email webhook — receives customer replies from Resend.
@@ -19,6 +10,8 @@ const PYTHON = process.env.CASHFLOW_PYTHON || "python3";
  * 1. Validates Resend webhook signature (if RESEND_WEBHOOK_SECRET is set)
  * 2. Checks that the sender email matches the invoice's customer email
  * 3. If no secret is configured, rejects in production mode
+ *
+ * Uses TypeScript parseReply() directly — no Python subprocess.
  */
 
 function verifyResendSignature(rawBody: string, signature: string | null, secret: string): boolean {
@@ -96,25 +89,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Sender email does not match customer" }, { status: 403 });
     }
 
-    // Parse the reply
-    const env = { ...process.env, CASHFLOW_DB: process.env.CASHFLOW_DB || undefined };
-
+    // Parse the reply using TypeScript (replaces Python subprocess)
     let parsed: {
-      parsed_status: string;
-      parsed_promise_date: string | null;
-      parsed_summary: string;
-      recommended_tone: string;
-      next_action: string;
-      error?: string;
+      parsedStatus: string;
+      parsedPromiseDate: string | null;
+      parsedSummary: string;
+      recommendedTone: string;
+      nextAction: string;
     };
 
     try {
-      const proc = await execFileAsync(
-        PYTHON,
-        [`${SCRIPTS_DIR}/parse_reply.py`, invoiceId, text],
-        { env, timeout: 150_000, maxBuffer: 4 * 1024 * 1024 }
-      );
-      parsed = JSON.parse(proc.stdout);
+      const result = await parseReply(invoiceId, text);
+      parsed = {
+        parsedStatus: result.parsedStatus,
+        parsedPromiseDate: result.parsedPromiseDate,
+        parsedSummary: result.parsedSummary,
+        recommendedTone: result.recommendedTone,
+        nextAction: result.nextAction,
+      };
     } catch (e: any) {
       console.error("[inbound] Parse failed:", e?.message || e);
       await prisma.communication.create({
@@ -130,9 +122,9 @@ export async function POST(req: Request) {
     }
 
     const updates: { status: string; promiseDate?: Date } | null =
-      parsed.parsed_status === "promised" && parsed.parsed_promise_date
-        ? { status: "promised", promiseDate: new Date(parsed.parsed_promise_date) }
-        : parsed.parsed_status === "disputed"
+      parsed.parsedStatus === "promised" && parsed.parsedPromiseDate
+        ? { status: "promised", promiseDate: new Date(parsed.parsedPromiseDate) }
+        : parsed.parsedStatus === "disputed"
           ? { status: "disputed" }
           : null;
 
@@ -143,11 +135,11 @@ export async function POST(req: Request) {
           direction: "inbound",
           channel: "email",
           content: text,
-          parsedStatus: parsed.parsed_status,
-          parsedPromiseDate: parsed.parsed_promise_date
-            ? new Date(parsed.parsed_promise_date)
+          parsedStatus: parsed.parsedStatus,
+          parsedPromiseDate: parsed.parsedPromiseDate
+            ? new Date(parsed.parsedPromiseDate)
             : null,
-          parsedSummary: parsed.parsed_summary,
+          parsedSummary: parsed.parsedSummary,
         },
       }),
       ...(updates
@@ -155,13 +147,13 @@ export async function POST(req: Request) {
         : []),
     ]);
 
-    console.log(`[inbound] Reply for ${invoice.invoiceNumber}: ${parsed.parsed_status}`);
+    console.log(`[inbound] Reply for ${invoice.invoiceNumber}: ${parsed.parsedStatus}`);
 
     return NextResponse.json({
       ok: true,
       invoiceNumber: invoice.invoiceNumber,
-      parsedStatus: parsed.parsed_status,
-      parsedSummary: parsed.parsed_summary,
+      parsedStatus: parsed.parsedStatus,
+      parsedSummary: parsed.parsedSummary,
     });
   } catch (error: any) {
     console.error("[inbound] Webhook error:", error?.message || error);

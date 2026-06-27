@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isDemoRequest, getDemoUserId } from "@/lib/demo";
+import { canCreateInvoice } from "@/lib/subscription";
 
 /**
  * Create a new customer + invoice.
@@ -65,6 +66,23 @@ export async function POST(req: Request) {
   }
   if (!dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
     return NextResponse.json({ error: "Due date must be YYYY-MM-DD" }, { status: 400 });
+  }
+
+  // Check plan limits (skip for demo mode)
+  if (!isDemoRequest(req)) {
+    const { allowed, current, limit, plan } = await canCreateInvoice(userId);
+    if (!allowed) {
+      return NextResponse.json(
+        {
+          error: `You've reached the ${plan} plan limit of ${limit} invoices. Upgrade to create more.`,
+          limit,
+          current,
+          plan,
+          upgradeUrl: "/pricing",
+        },
+        { status: 402 }
+      );
+    }
   }
 
   try {

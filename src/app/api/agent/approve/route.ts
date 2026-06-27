@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       invoiceNumber: true,
       amount: true,
       currency: true,
+      paymentLinkId: true,
       customer: { select: { name: true, email: true } },
     },
   });
@@ -60,14 +61,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
+  // Server-side payment link insertion: if the draft doesn't contain
+  // a payment URL but one exists, append it
+  let finalDraftText = draftText.trim();
+  if (invoice.paymentLinkId && invoice.paymentLinkId.startsWith("http") &&
+      !finalDraftText.includes(invoice.paymentLinkId)) {
+    finalDraftText += `\n\nPay online: ${invoice.paymentLinkId}`;
+  }
+
   // Actually send the email FIRST — if this fails, we don't record anything
   const replyToDomain = process.env.EMAIL_DOMAIN || "cashflowagent.dev";
   const emailResult = await sendEmail({
     to: invoice.customer.email,
-    subject: `Follow-up: Invoice ${invoice.invoiceNumber} (${new Intl.NumberFormat("en-US", { style: "currency", currency: invoice.currency.toUpperCase() }).format(invoice.amount / 100)})`,
-    text: draftText.trim(),
+    subject: `Follow-up: Invoice ${invoice.invoiceNumber} (${new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.currency.toUpperCase() }).format(invoice.amount / 100)})`,
+    text: finalDraftText,
     replyTo: `reply+${invoiceId}@${replyToDomain}`,
   });
+
+  // If email failed in production (not demo mode), don't record as sent
+  if (!emailResult.sent && !emailResult.demo) {
+    return NextResponse.json(
+      { error: "Email send failed", emailError: emailResult.error },
+      { status: 502 }
+    );
+  }
 
   // Record communication + spending atomically in a single transaction
   const [communication] = await prisma.$transaction([
@@ -76,10 +93,10 @@ export async function POST(req: Request) {
         invoiceId,
         direction: "outbound",
         channel: "email",
-        content: draftText.trim(),
+        content: finalDraftText,
         agentDraft: true,
         approved: true,
-        sentAt: new Date(),
+        sentAt: emailResult.sent ? new Date() : null,
         parsedSummary: tone ? `Approved draft (tone: ${tone})` : "Approved draft",
       },
     }),
